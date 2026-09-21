@@ -25,6 +25,17 @@ export const sessionDebugRoundSchema = z
     tokensPerSecond: count.nullable(),
   })
   .strict();
+// 会话级吞吐汇总：权威 TPS 事实由本旁路唯一累积，rounds 数组有截断上限，汇总不得从它二次推导。
+export const sessionDebugThroughputSchema = z
+  .object({
+    countedRounds: count,
+    totalOutputTokens: count,
+    totalGenerationMs: count,
+    avgTokensPerSecond: count.nullable(),
+    lastTokensPerSecond: count.nullable(),
+  })
+  .strict();
+export type SessionDebugThroughput = z.infer<typeof sessionDebugThroughputSchema>;
 export const sessionDebugNetworkEntrySchema = z
   .object({
     eventKey: z.string(),
@@ -77,6 +88,8 @@ export const sessionDebugSnapshotSchema = z
       })
       .strict()
       .nullable(),
+    // additive + optional：旧 CLI 响应缺该字段时仍可解析，UI 按缺数据显示 "-"。
+    throughput: sessionDebugThroughputSchema.optional(),
   })
   .strict();
 export type SessionDebugSnapshot = z.infer<typeof sessionDebugSnapshotSchema>;
@@ -98,4 +111,40 @@ export function calculateOutputTps(
     return null;
   const tps = (outputTokens * 1000) / generationDurationMs;
   return Number.isFinite(tps) ? tps : null;
+}
+
+export function emptySessionThroughput(): SessionDebugThroughput {
+  return {
+    countedRounds: 0,
+    totalOutputTokens: 0,
+    totalGenerationMs: 0,
+    avgTokensPerSecond: null,
+    lastTokensPerSecond: null,
+  };
+}
+
+/**
+ * 会话吞吐按完成轮累积（token 加权平均）。只有同时具备权威 outputTokens 与同源
+ * generationDurationMs 的轮才计入：缺生成时长的轮整轮跳过，避免把排队或首 token
+ * 延迟摊进速率，也避免出现只加分母不加分子的不对称累计。
+ */
+export function accumulateSessionThroughput(
+  previous: SessionDebugThroughput | null,
+  outputTokens: number | undefined,
+  generationDurationMs: number | null,
+): SessionDebugThroughput {
+  const roundTps = calculateOutputTps(outputTokens, generationDurationMs);
+  if (roundTps === null || outputTokens === undefined) {
+    return previous ?? emptySessionThroughput();
+  }
+  const totalOutputTokens = (previous?.totalOutputTokens ?? 0) + outputTokens;
+  const totalGenerationMs = (previous?.totalGenerationMs ?? 0) + (generationDurationMs ?? 0);
+  return {
+    countedRounds: (previous?.countedRounds ?? 0) + 1,
+    totalOutputTokens,
+    totalGenerationMs,
+    avgTokensPerSecond:
+      totalGenerationMs > 0 ? (totalOutputTokens * 1000) / totalGenerationMs : null,
+    lastTokensPerSecond: roundTps,
+  };
 }

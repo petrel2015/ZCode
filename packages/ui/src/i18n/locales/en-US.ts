@@ -4303,6 +4303,8 @@ const enUS: Record<string, string> = {
   "chat.history.duration.second": "s",
   "chat.stop": "Stop",
   "chat.stop.short": "Stop",
+  "chat.streamRate.title": "≈ {rate} token/s",
+  "chat.streamRate.description": "Estimated streaming rate of this turn's reply and reasoning",
   "chat.promptEnhance.title": "Enhance prompt",
   "chat.promptEnhance.description":
     "Refine the current draft with the selected model configuration.",
@@ -4372,6 +4374,8 @@ const enUS: Record<string, string> = {
   "tokenDebug.summary.average": "Average hit",
   "tokenDebug.summary.input": "Total input",
   "tokenDebug.summary.cacheRead": "Total cache read",
+  "tokenDebug.summary.avgTps": "Avg output rate (token/s)",
+  "tokenDebug.summary.lastTps": "Last round rate (token/s)",
   "tokenDebug.column.round": "Round",
   "tokenDebug.column.input": "Input",
   "tokenDebug.column.output": "Output",
