@@ -1,5 +1,4 @@
 /* eslint-disable max-lines -- 网络指标采集/聚合/ARMS 上报 */
-import armsRum from "@arms/rum-electron";
 import { mapZCodeEnvToArmsRumEnv } from "@zcode/shared";
 import type { NetworkObservation } from "@zcode/rpc";
 import {
@@ -10,6 +9,7 @@ import {
   type InterfaceNetworkStats,
 } from "./networkTelemetryAggregator.js";
 import { desktopRuntimeEnv } from "./desktopRuntimeEnv.js";
+import { logger as diagnosticLogger } from "./logger.js";
 
 /** 与资源指标对齐：开发 1min、生产 5min 聚合上报 */
 const NETWORK_REPORT_INTERVAL_MS = desktopRuntimeEnv === "development" ? 60_000 : 300_000;
@@ -71,7 +71,7 @@ function reportNetworkCustom(
   });
 
   try {
-    armsRum.sendCustom({
+    diagnosticLogger.debug("[local-diagnostics]", {
       name,
       type: "custom",
       group: "network",
@@ -141,12 +141,6 @@ export function ingestHostNetworkObservations(observations: NetworkObservation[]
 
 export function configureDesktopNetworkTelemetry(context: NetworkGlobalContext): void {
   globalContext = context;
-  armsRum.setConfig("properties", {
-    device_mid: context.deviceMid,
-    platform: normalizeOsCategory(context.platform),
-    app_version: context.appVersion,
-    arms_env: context.armsEnv,
-  });
 }
 
 export function registerDesktopNetworkTelemetry(logger: NetworkLogger): void {

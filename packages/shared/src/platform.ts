@@ -635,22 +635,11 @@ export interface IPlatformService {
   getApplicationIcon?(
     request: string | ApplicationIconRequest,
   ): Promise<ApplicationIconInfo | null>;
-
-  /** 打开反馈入口，由平台自行解析最终地址 */
-  openFeedback(): Promise<void>;
-
   /** 订阅 main 进程打开内置反馈对话框事件（Desktop） */
   onOpenFeedbackDialog?(handler: () => void): () => void;
 
   /** 订阅 main 进程打开我的工单面板事件（Desktop） */
   onOpenTicketsPanel?(handler: () => void): () => void;
-
-  /** 打开用户社群入口，由平台自行解析当前语言对应渠道 */
-  openCommunity(): Promise<void>;
-
-  /** 查询当前语言下是否存在可用的用户社群入口 */
-  canOpenCommunity(locale: Locale): Promise<boolean>;
-
   /** 在系统文件管理器中打开指定路径 */
   openInFileManager(path: string): Promise<{ success: boolean; error?: string }>;
 

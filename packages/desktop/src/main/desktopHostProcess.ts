@@ -29,7 +29,6 @@ import {
   LAUNCH_MARKS_QUERY_KEY,
   RUNTIME_ZCODE_DEBUG,
   serializeLaunchMarks,
-  type RemoteTarget,
   type WorkspacePurpose,
   ZCODE_DESKTOP_CONTEXT_PROMPT_ENABLED_ENV,
 } from "@zcode/shared";
@@ -52,7 +51,6 @@ import {
 import { ingestHostNetworkObservations } from "./desktopNetworkTelemetry.js";
 import { ingestCliResourceSample } from "./processResourceCliSource.js";
 import { ingestHostSelfResourceSample } from "./processResourceSelfHeapSource.js";
-import { createFeedbackLogArchiveFromExportLogs } from "./exportLogs.js";
 import { buildHostE2ECoverageEnv } from "./e2eCoverage.js";
 
 export interface WindowBootstrapOptions {
@@ -205,28 +203,6 @@ export function spawnHostProcess(
       workspaceIdentity: string;
       target: RemoteTarget;
     }) => Promise<{ ok: boolean; port?: MessagePortMain; error?: string }>;
-    /** host → main：定时任务派发结果，转交给 cron scheduler 结算调度状态机。 */
-    onCronRunResult?: (result: {
-      runId: string;
-      ok: boolean;
-      taskId?: string;
-      sessionId?: string;
-      error?: string;
-      failureKind?: "transient" | "permanent";
-    }) => void;
-    /** host → main：闲时任务派发结果，转交给 scheduler 结算（与 cron 独立）。 */
-    onOffPeakRunResult?: (result: {
-      offPeakTaskId: string;
-      ok: boolean;
-      conversationId?: string;
-      sessionId?: string;
-      error?: string;
-      failureKind?: "transient" | "permanent";
-    }) => void;
-    /** host 中 manual run 落库后请求 main 立即唤醒 scheduler。 */
-    onCronSchedulerWakeRequested?: (automationId: string) => void;
-    /** host 中闲时任务翻 schedulable 后请求 main 立即唤醒 scheduler。 */
-    onOffPeakSchedulerWakeRequested?: (offPeakTaskId?: string) => void;
     // browser-use：main 用 WebContentsView+CDP 执行一条命令。实现由宿主注入；缺省则 backend_unavailable。
     handleBrowserExecuteRequest?: (params: {
       win: BrowserWindow;
@@ -405,30 +381,6 @@ export function spawnHostProcess(
       dependencies.onCuaOperationStateChanged?.(child, result.data);
       return;
     }
-
-    if (result.data.type === HostResponseTypes.FeedbackLogArchiveRequest) {
-      const request = result.data;
-      void createFeedbackLogArchiveFromExportLogs(request.sourceDir)
-        .then((archive) => {
-          child.postMessage({
-            type: HostMessageTypes.FeedbackLogArchiveResult,
-            requestId: request.requestId,
-            ok: true,
-            path: archive.path,
-            size: archive.size,
-          });
-        })
-        .catch((error) => {
-          child.postMessage({
-            type: HostMessageTypes.FeedbackLogArchiveResult,
-            requestId: request.requestId,
-            ok: false,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        });
-      return;
-    }
-
     if (result.data.type === HostResponseTypes.BrowserExecuteRequest) {
       // browser-use：main 用 WebContentsView+CDP 执行命令（handleBrowserExecuteRequest）。
       // 缺省实现时返回 backend_unavailable，保证通道打通但不阻塞。
@@ -510,41 +462,6 @@ export function spawnHostProcess(
       dependencies.onAgentProcessException?.(result.data);
       return;
     }
-
-    if (result.data.type === HostResponseTypes.CronRunResult) {
-      dependencies.onCronRunResult?.({
-        runId: result.data.runId,
-        ok: result.data.ok,
-        taskId: result.data.taskId,
-        sessionId: result.data.sessionId,
-        error: result.data.error,
-        failureKind: result.data.failureKind,
-      });
-      return;
-    }
-
-    if (result.data.type === HostResponseTypes.OffPeakRunResult) {
-      dependencies.onOffPeakRunResult?.({
-        offPeakTaskId: result.data.offPeakTaskId,
-        ok: result.data.ok,
-        conversationId: result.data.conversationId,
-        sessionId: result.data.sessionId,
-        error: result.data.error,
-        failureKind: result.data.failureKind,
-      });
-      return;
-    }
-
-    if (result.data.type === HostResponseTypes.CronSchedulerWakeRequest) {
-      dependencies.onCronSchedulerWakeRequested?.(result.data.automationId);
-      return;
-    }
-
-    if (result.data.type === HostResponseTypes.OffPeakSchedulerWakeRequest) {
-      dependencies.onOffPeakSchedulerWakeRequested?.(result.data.offPeakTaskId);
-      return;
-    }
-
     if (result.data.type === HostResponseTypes.AgentRunningTaskCountChanged) {
       if (result.data.runningTaskCount > 0) {
         dependencies.hostRunningTaskCountMap.set(child, result.data.runningTaskCount);

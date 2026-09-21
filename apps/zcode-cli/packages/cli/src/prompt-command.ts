@@ -16,7 +16,6 @@ import {
   readHeadlessRuntimeFacts,
   waitForHeadlessWorkflowSettle,
 } from "./headless-workflow.js";
-import { runLoginCommand, runLogoutCommand } from "./login-command.js";
 import { resolveResumeSession } from "./resume.js";
 import { readRuntimeEventSubscriber } from "./runtime-event-subscriber.js";
 import {
@@ -86,21 +85,6 @@ export const runPrompt = async (
   if (slashCommand?.type === "known" && slashCommand.name === "skill" && !slashCommand.skillName) {
     return await runSkillsCommand(ctx, options, deps, []);
   }
-  if (slashCommand?.type === "known" && slashCommand.name === "login") {
-    if (slashCommand.args.length > 0) {
-      ctx.stderr.write("Usage: /login\n");
-      return 1;
-    }
-    return await runLoginCommand(ctx, options, deps, false);
-  }
-  if (slashCommand?.type === "known" && slashCommand.name === "logout") {
-    if (slashCommand.args.length > 0) {
-      ctx.stderr.write("Usage: /logout\n");
-      return 1;
-    }
-    return await runLogoutCommand(ctx, options, deps);
-  }
-
   const runtimePrompt =
     slashCommand?.type === "known" && slashCommand.name === "skill"
       ? buildManualSkillPrompt(slashCommand.skillName, slashCommand.task)
@@ -180,17 +164,7 @@ export const runPrompt = async (
       stderr: ctx.stderr,
       stdout: ctx.stdout,
     });
-    const prepareTelemetry =
-      deps.prepareZCodeTelemetryEnv ?? bootstrapModule?.prepareZCodeTelemetryEnv;
-    if (prepareTelemetry) {
-      shutdownTelemetry = deps.shutdownZCodeTelemetry ?? bootstrapModule?.shutdownZCodeTelemetry;
-    }
-    const appEnv = prepareTelemetry
-      ? await prepareTelemetry(env, {
-          cliVersion: version,
-          productVersion: env.ZCODE_APP_VERSION,
-        })
-      : env;
+    const appEnv = env;
     const startProviderRegistryRuntime =
       deps.startProcessProviderRegistryRuntime ??
       bootstrapModule?.startProcessProviderRegistryRuntime;
@@ -203,7 +177,6 @@ export const runPrompt = async (
         ? {}
         : {
             standalone: {
-              ...createCliProviderRefreshReporter(ctx.stderr),
               ...(deps.userConfigPath ? { legacyCliUserConfigFilePath: deps.userConfigPath } : {}),
             },
           },
@@ -639,4 +612,3 @@ function writeHeadlessWorkspaceHookTrustDiagnostic(
     ].join("\n") + "\n",
   );
 }
-import { createCliProviderRefreshReporter } from "./provider-runtime-env.js";

@@ -1,12 +1,15 @@
 # ZCode
 
+## Standalone GLM branch
+
+This personal branch, `feat/standalone-glm`, removes the ZCode platform service dependencies and uses locally configured model providers. No new release/version is declared.
+
+See the [change log](CHANGELOG.md), [behavior and migration contract](docs/specs/standalone-runtime.md), and [validation results and limits](docs/standalone-validation.md) before upgrading. Model and third-party MCP calls still use the network; this is not an offline-only application.
+
 <div align="center">
   <img src="public/logo/icons/1024x1024.png" alt="ZCode" width="128" height="128" />
 </div>
-<p align="center">
-  <a href="https://applink.feishu.cn/client/chat/chatter/add_by_link?link_token=47ag983c-8fcb-4d6d-814b-5395193a712c&amp;qr_code=true">Feishu community</a> ·
-  <a href="https://discord.gg/z9aBcQXZQ3">Discord</a>
-</p>
+
 <p align="center">
   <a href="README.md">简体中文</a> | English
 </p>
@@ -71,7 +74,7 @@ pnpm dev:web
 ZCODE_SERVER_WORKSPACE=/path/to/project pnpm dev:web
 ```
 
-This starts both the Web development server (default: `http://localhost:5173`) and the backend (default: `http://localhost:3030`). Open the Web development server in your browser. `/ws` and general `/api` requests are proxied to the local backend; `/api/v1/oauth/token` is proxied separately to the configured product service.
+This starts both the Web development server (default: `http://localhost:5173`) and the backend (default: `http://localhost:3030`). Open the Web development server in your browser. `/ws` and general `/api` requests are proxied to the local backend.
 
 After changing Agent source code, run `pnpm --filter @zcode/cli... build` and restart the service. To validate the complete distribution, extract and run it as described under Packaging → ZCode CLI distribution below.
 
@@ -117,6 +120,12 @@ This entry runs the Agent CLI directly and does not handle the distribution's `-
 
 ## Configuration
 
+This standalone branch requires no platform account and removes billing, scheduled/off-peak tasks, tickets, platform sharing, and online updates.
+
+Open **Settings → Model settings → New provider**, choose **BigModel Coding Plan**, and enter your API key. The default endpoint is `https://open.bigmodel.cn/api/anthropic` using Anthropic Messages. Use a model ID supported by your API, or edit the endpoint/add another provider. Configuration is saved locally and survives restarts.
+
+Conversations, tools, and manually launched saved workflows remain available. Historical credentials and scheduled task records are neither resumed nor deleted. Prepare remote runtime assets locally or host them yourself; there is no default official CDN download.
+
 The root [.env.example](.env.example) provides sample service URLs and build configuration. Copy it to `.env` as needed and place local overrides in `.env.local`. Select the Desktop development environment with `dev:desktop:test` or `dev:desktop:prod`.
 
 | Setting                              | Purpose                                                                                 |
@@ -130,7 +139,7 @@ Runtime variables can be set explicitly in the environment of the startup comman
 
 ## Packaging
 
-See [third-party/README.md](third-party/README.md) for notice generation, distribution checks, and where the notices are included in each distribution.
+See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) for third-party licenses and attribution.
 
 ### Desktop
 

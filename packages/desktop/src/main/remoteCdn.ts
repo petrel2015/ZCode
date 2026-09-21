@@ -1,7 +1,6 @@
-import { ZCODE_VERSION, type ZCodeEnv } from "@zcode/shared";
+import { assertIndependentEndpoint, ZCODE_VERSION, type ZCodeEnv } from "@zcode/shared";
 
 declare const __ZCODE_CDN_BASE_URL__: string | undefined;
-const DEFAULT_CDN_BASE_URL = "https://cdn-zcode.z.ai";
 
 export interface ResolveRemoteCdnOptions {
   env?: ZCodeEnv;
@@ -13,6 +12,7 @@ export interface ResolveRemoteCdnOptions {
 }
 
 function normalizeBaseUrl(value: string): string {
+  assertIndependentEndpoint(value);
   const url = new URL(value);
   if (!["http:", "https:"].includes(url.protocol))
     throw new Error("CDN URL must use http or https");
@@ -25,7 +25,9 @@ export function resolveRemoteCdnBaseUrls(options: ResolveRemoteCdnOptions = {}):
   const baseUrl =
     process.env.ZCODE_CDN_BASE_URL?.trim() ||
     (typeof __ZCODE_CDN_BASE_URL__ === "undefined" ? "" : __ZCODE_CDN_BASE_URL__) ||
-    DEFAULT_CDN_BASE_URL;
+    "";
+  // 独立版本仅下载用户明确配置的远程运行时；缺省使用已有本地资源。
+  if (!baseUrl) return [];
   return [
     `${normalizeBaseUrl(baseUrl)}/zcode/electron/releases/${options.version ?? ZCODE_VERSION}`,
   ];

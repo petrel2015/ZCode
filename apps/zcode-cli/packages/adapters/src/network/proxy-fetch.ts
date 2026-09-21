@@ -1,3 +1,4 @@
+import { createIndependentFetch } from "@zcode/shared";
 import http from "node:http";
 import https from "node:https";
 import { Readable } from "node:stream";
@@ -27,6 +28,10 @@ interface NormalizedFetchRequest {
 }
 
 export function createNetworkProxyFetch(options: NetworkProxyFetchOptions): NetworkFetch {
+  return createIndependentFetch(createRawNetworkProxyFetch(options));
+}
+
+function createRawNetworkProxyFetch(options: NetworkProxyFetchOptions): NetworkFetch {
   const directFetch = options.fetch ?? globalThis.fetch.bind(globalThis);
   if (!hasNetworkFetchPolicy(options)) {
     return directFetch;

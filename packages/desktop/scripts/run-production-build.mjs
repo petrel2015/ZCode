@@ -14,6 +14,9 @@ export function resolveDesktopBuildCwd() {
 export function resolveDesktopProductionCleanPaths(cwd) {
   return [
     resolve(cwd, "out/main"),
+    // 删除旧版本遗留的调度器产物，避免再次打入安装包。
+    resolve(cwd, "out/scheduler"),
+    resolve(cwd, "out/.scheduler-build-ready"),
     resolve(cwd, "out/host"),
     resolve(cwd, "out/preload"),
     resolve(cwd, "out/renderer"),

@@ -1,12 +1,15 @@
 # ZCode
 
+## 独立 GLM 分支
+
+个人分支 `feat/standalone-glm` 移除了 ZCode 平台服务依赖，改用本地配置的模型供应商。本次不声明新版本或正式发行。
+
+改动范围见[变更记录](CHANGELOG.zh.md)，数据兼容与行为约定见[独立运行规范](docs/specs/standalone-runtime.md)，实测结果与未通过项见[验收记录](docs/standalone-validation.md)。模型和第三方 MCP 仍可能访问网络，不代表离线应用。
+
 <div align="center">
   <img src="public/logo/icons/1024x1024.png" alt="ZCode" width="128" height="128" />
 </div>
-<p align="center">
-  <a href="https://applink.feishu.cn/client/chat/chatter/add_by_link?link_token=47ag983c-8fcb-4d6d-814b-5395193a712c&amp;qr_code=true">飞书社群</a> ·
-  <a href="https://discord.gg/z9aBcQXZQ3">Discord</a>
-</p>
+
 <p align="center">
   简体中文 | <a href="README.en.md">English</a>
 </p>
@@ -77,7 +80,7 @@ pnpm dev:web
 ZCODE_SERVER_WORKSPACE=/path/to/project pnpm dev:web
 ```
 
-该命令同时启动 Web 开发服务器（默认 `http://localhost:5173`）和后端（默认 `http://localhost:3030`）；浏览器访问前者。`/ws` 和一般 `/api` 请求代理到本地后端，`/api/v1/oauth/token` 单独代理到当前配置的产品服务。
+该命令同时启动 Web 开发服务器（默认 `http://localhost:5173`）和后端（默认 `http://localhost:3030`）；浏览器访问前者。`/ws` 和一般 `/api` 请求代理到本地后端；平台 OAuth 代理已移除。
 
 Agent 源码修改后，执行 `pnpm --filter @zcode/cli... build` 并重启服务。需要验证完整发行包时，按下方“ZCode 命令行版”打包章节解压运行。
 
@@ -123,6 +126,12 @@ node apps/zcode-cli/packages/cli/dist/zcode.cjs --help
 
 ## 配置
 
+本分支为独立运行版本：不需要平台账户，不提供账单、定时/闲时任务、工单、平台分享和在线更新。
+
+在 **设置 → 模型设置 → 新供应商** 中选择 **BigModel Coding Plan**，填入自己的 API Key；默认 Base URL 为 `https://open.bigmodel.cn/api/anthropic`，协议为 Anthropic Messages。模型 ID 使用你的接口实际支持的值，也可编辑 Base URL 或添加其他供应商。配置保存在本地，关闭并重开应用后仍然有效。
+
+普通对话、工具执行和手动运行的已保存工作流仍可使用。旧账户凭据和定时任务记录不会恢复执行，也不会被此版本删除。远程运行时资源需本地准备或自行托管，不再提供默认官方 CDN 下载。
+
 根目录 [.env.example](.env.example) 提供服务地址与构建配置示例，可按需复制到 `.env`，本地覆盖放入 `.env.local`。Desktop 的开发环境通过 `dev:desktop:test` / `dev:desktop:prod` 选择。
 
 | 配置                                 | 用途                                             |
@@ -136,7 +145,7 @@ node apps/zcode-cli/packages/cli/dist/zcode.cjs --help
 
 ## 打包
 
-第三方声明生成、发行校验流程及声明在发行物中的位置见 [third-party/README.md](third-party/README.md)。
+第三方组件的许可证与署名见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。
 
 ### 桌面版
 

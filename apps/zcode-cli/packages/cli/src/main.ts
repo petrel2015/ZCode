@@ -10,6 +10,8 @@ import { installCliProcessErrorBoundary } from "./process-errors.js";
 import { installProtocolStderrBoundary } from "./protocol-stderr.js";
 import { createProtocolProcessLifecycle } from "./protocol-lifecycle.js";
 import { isProtocolServerInvocation } from "./arguments.js";
+import { createIndependentFetch } from "@zcode/shared";
+globalThis.fetch = createIndependentFetch(globalThis.fetch.bind(globalThis));
 
 void main();
 

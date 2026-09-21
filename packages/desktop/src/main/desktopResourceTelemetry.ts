@@ -1,4 +1,3 @@
-import armsRum from "@arms/rum-electron";
 import {
   bytesToKb,
   createMemorySampleWriteGate,
@@ -41,6 +40,7 @@ import {
   PERF_PROCESS_WINDOW_EVENT_NAME,
 } from "./processResourceWindowEvent.js";
 import { listRegisteredHostAgentProcessIds } from "./resourceManagerWindow.js";
+import { logger as diagnosticLogger } from "./logger.js";
 
 /**
  * main 侧进程资源遥测。
@@ -154,7 +154,7 @@ function reportResourceCustom(
   }
 
   try {
-    armsRum.sendCustom(payload);
+    diagnosticLogger.debug("[local-diagnostics]", payload);
   } catch (error) {
     console.warn("[resource] sendCustom failed:", name, error);
   }
@@ -420,13 +420,6 @@ export function configureDesktopResourceTelemetry(context: ResourceGlobalContext
   processResourceSystemWindow.clear();
   globalContext = context;
   desktopHardware = resolveDesktopHardware(context.platform);
-
-  armsRum.setConfig("properties", {
-    device_mid: context.deviceMid,
-    platform: normalizeOsCategory(context.platform),
-    app_version: context.appVersion,
-    arms_env: context.armsEnv,
-  });
 }
 
 export function registerDesktopResourceTelemetry(

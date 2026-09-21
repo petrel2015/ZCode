@@ -7,9 +7,7 @@ import {
   Bot,
   Palette,
   Sun,
-  BarChart3,
   Terminal,
-  AlarmClock,
   Anchor,
   Brain,
   Blocks,
@@ -110,13 +108,6 @@ const BASE_SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
     groupId: "agentCapabilities",
   },
   {
-    id: "automations",
-    icon: AlarmClock,
-    titleId: "settings.automations.title",
-    titleBadgeId: "settings.automations.betaBadge",
-    groupId: "agentCapabilities",
-  },
-  {
     id: "hooks",
     icon: Anchor,
     titleId: "settings.hooks.title",
@@ -149,12 +140,6 @@ const BASE_SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
     icon: FileSearch,
     titleId: "settings.workspaceFileSearch.title",
     groupId: "basics",
-  },
-  {
-    id: "usage",
-    icon: BarChart3,
-    titleId: "settings.usageTitle",
-    groupId: "dataAndStats",
   },
 ];
 

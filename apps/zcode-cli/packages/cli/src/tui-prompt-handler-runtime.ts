@@ -4,7 +4,6 @@
 // 公开面仍从 tui-prompt-handler.ts 导出。
 import { loadBootstrapModule } from "./bootstrap-loader.js";
 import { loadCliDotenv } from "./env.js";
-import { createCliProviderRefreshReporter } from "./provider-runtime-env.js";
 import { resolveResumeSession } from "./resume.js";
 import type { CliResumeRequest, RunDependencies } from "./cli-types.js";
 
@@ -28,7 +27,6 @@ export const createTuiProcessRuntimeState = (): TuiProcessRuntimeState => ({
 // 品牌类型（SessionId）和 createZCodeApp 的联合签名收窄错。
 export async function prepareTuiAppRuntime(
   deps: RunDependencies,
-  version: string,
   request: CliResumeRequest,
   state: TuiProcessRuntimeState,
 ) {
@@ -49,18 +47,7 @@ export async function prepareTuiAppRuntime(
   const bootstrapModule = deps.createZCodeApp ? undefined : await loadBootstrapModule();
   const createAppFactory = deps.createZCodeApp ?? bootstrapModule?.createZCodeApp;
   if (!createAppFactory) throw new Error("ZCode app factory is unavailable.");
-  const prepareTelemetry =
-    deps.prepareZCodeTelemetryEnv ?? bootstrapModule?.prepareZCodeTelemetryEnv;
-  if (prepareTelemetry) {
-    state.shutdownTelemetry =
-      deps.shutdownZCodeTelemetry ?? bootstrapModule?.shutdownZCodeTelemetry;
-  }
-  const appEnv = prepareTelemetry
-    ? await prepareTelemetry(env, {
-        cliVersion: version,
-        productVersion: env.ZCODE_APP_VERSION,
-      })
-    : env;
+  const appEnv = env;
   const startProviderRegistryRuntime =
     deps.startProcessProviderRegistryRuntime ??
     bootstrapModule?.startProcessProviderRegistryRuntime;
@@ -73,7 +60,6 @@ export async function prepareTuiAppRuntime(
       ? {}
       : {
           standalone: {
-            ...createCliProviderRefreshReporter(),
             ...(deps.userConfigPath ? { legacyCliUserConfigFilePath: deps.userConfigPath } : {}),
           },
         },
