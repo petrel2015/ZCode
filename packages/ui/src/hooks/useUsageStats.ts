@@ -240,6 +240,62 @@ export function useAppUsageStats(range: AppUsageRange) {
   return { ...state, refresh };
 }
 
+// 增强分支并存改造：官方 useAppUsageStats 走 usageStatsService（monitor 快照），
+// 本地恢复版数据路径不同——只聚合本地 session 库的真实统计，经 zcodeAgentService →
+// v4 usage/stats → CLI usage store 读取；不经过任何平台 monitor API，
+// 因此改名 useLocalAppUsageStats 与官方 hook 并存（issue #16 两套并存拍板）。
+export function useLocalAppUsageStats(range: AppUsageRange) {
+  const { zcodeAgentService } = useServices();
+  const [state, setState] = useState<AppUsageStatsState>({
+    snapshot: null,
+    loading: false,
+    error: null,
+  });
+  const requestVersionRef = useRef(0);
+
+  const refresh = useCallback(async () => {
+    const requestVersion = requestVersionRef.current + 1;
+    requestVersionRef.current = requestVersion;
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    setState((current) => ({
+      snapshot: current.snapshot,
+      loading: true,
+      error: null,
+    }));
+    try {
+      const snapshot = await zcodeAgentService.getAppUsageStats({
+        range,
+        timeZone,
+      });
+      if (requestVersionRef.current !== requestVersion) {
+        return;
+      }
+      setState({ snapshot, loading: false, error: null });
+    } catch (error) {
+      if (requestVersionRef.current !== requestVersion) {
+        return;
+      }
+      const message = getErrorMessage(error);
+      logger.warn("[useLocalAppUsageStats] 读取本地使用统计失败", {
+        range,
+        timeZone,
+        error: message,
+      });
+      setState((current) => ({
+        snapshot: current.snapshot,
+        loading: false,
+        error: message,
+      }));
+    }
+  }, [range, zcodeAgentService]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  return { ...state, refresh };
+}
+
 export function useCodingPlanUsageStats(
   range: CodingPlanUsageRange,
   options: {
