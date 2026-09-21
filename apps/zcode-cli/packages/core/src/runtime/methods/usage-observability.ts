@@ -370,7 +370,11 @@ function modelNetworkEvents(events: readonly SessionEvent[]) {
     );
 }
 
-function firstModelTokenAt(
+/**
+ * 模型首个非空 text/reasoning delta 的事件时间；无流式内容时返回 undefined。
+ * 主轮吞吐（首 token → 请求完成）与 usage 明细共用这一首 token 口径，导出复用避免第二份实现漂移。
+ */
+export function firstModelTokenAt(
   events: readonly SessionEvent[],
   startIndex: number,
 ): number | undefined {

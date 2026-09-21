@@ -776,6 +776,16 @@ export interface ModelCompletePayload {
   fileChanges?: TurnFileChangeSummary;
   querySource?: string;
   stopReason: string;
+  /**
+   * 主轮吞吐汇总（token 加权平均：Σ outputTokens ÷ Σ 生成时长，生成时长 = 首 token → 请求完成）。
+   * 仅 querySource === "main_turn" 携带；compact/title 等旁路调用与缺首 token/缺 outputTokens
+   * 的轮不携带（与 cacheHit 同门槛，旧事件无此字段）。
+   */
+  throughput?: {
+    countedRounds: number;
+    avgTokensPerSecond: number | null;
+    lastTokensPerSecond: number | null;
+  };
   /** 当前模型请求组装出的完整 tool call 数量；旧事件可能缺失。 */
   toolCallCount?: number;
   usage: TokenUsage | ModelUsage;

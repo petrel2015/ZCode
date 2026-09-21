@@ -6,11 +6,13 @@ import {
   emptySessionThroughput,
   sessionDebugSnapshotSchema,
 } from "../../shared/src/session-debug.js";
+import { sessionUsageStateSchema } from "../../shared/src/zcode-protocol-v4/snapshot.js";
 import {
   STREAMING_RATE_STALL_MS,
   STREAMING_RATE_WINDOW_MS,
   StreamingRateEstimator,
   estimateStreamedTokens,
+  formatTokenRateReadings,
 } from "../src/v4/streamingTokenRate.js";
 
 test("calculateOutputTps uses output tokens over generation-only duration", () => {
@@ -126,4 +128,36 @@ test("streaming rate estimator prunes samples beyond the window", () => {
     STREAMING_RATE_WINDOW_MS + 1000 + 100,
   );
   assert.equal(rate, null);
+});
+
+test("token rate readings map live null to 0 and avg null to em dash", () => {
+  // 估算器停滞/输出结束返回 null：实时表盘常驻显示精确 0（不加 ≈）。
+  assert.deepEqual(formatTokenRateReadings(null, null), { live: "0", avg: "—" });
+  assert.deepEqual(formatTokenRateReadings(0, 45.678), { live: "0", avg: "45.7" });
+  // 实时估算 > 0 才带 ≈ 前缀；平均是权威值，不加 ≈。
+  assert.deepEqual(formatTokenRateReadings(12.34, 45.678), { live: "≈ 12.3", avg: "45.7" });
+});
+
+test("session usage schema defaults throughput to null for legacy snapshots", () => {
+  // 旧快照/旧 CLI 的 usage 不带 throughput 字段：default null 保证可解析（UI 平均显示 —）。
+  const legacy = sessionUsageStateSchema.parse({
+    contextWindow: null,
+    cumulative: { inputTokens: 1, outputTokens: 2, cacheReadTokens: 0, cacheWriteTokens: 0 },
+  });
+  assert.equal(legacy.throughput, null);
+  const current = sessionUsageStateSchema.parse({
+    contextWindow: null,
+    cumulative: { inputTokens: 1, outputTokens: 2, cacheReadTokens: 0, cacheWriteTokens: 0 },
+    throughput: { countedRounds: 2, avgTokensPerSecond: 100.5, lastTokensPerSecond: 120 },
+  });
+  assert.equal(current.throughput?.countedRounds, 2);
+  assert.equal(current.throughput?.avgTokensPerSecond, 100.5);
+  // 子对象 strict：多余字段拒绝，防止投影/CLI 侧字段漂移进快照契约。
+  assert.throws(() =>
+    sessionUsageStateSchema.parse({
+      contextWindow: null,
+      cumulative: { inputTokens: 1, outputTokens: 2, cacheReadTokens: 0, cacheWriteTokens: 0 },
+      throughput: { countedRounds: 1, avgTokensPerSecond: 1, lastTokensPerSecond: 1, extra: 1 },
+    }),
+  );
 });
