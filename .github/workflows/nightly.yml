@@ -1,0 +1,180 @@
+# standalone 分支每日 nightly 构建与发布。
+#
+# 注意：GitHub Actions 的 schedule 只会从默认分支（main）上的 workflow 文件触发，
+# 因此本文件必须存在于 main；构建内容通过 checkout 的 ref: standalone 指向 standalone 分支。
+# cron 使用 UTC：UTC 21:00 = 北京时间次日凌晨 05:00。
+name: Nightly Standalone Build
+
+on:
+  schedule:
+    - cron: "0 21 * * *" # 北京时间每天 05:00
+  workflow_dispatch: # 支持手动触发验证
+
+permissions:
+  contents: write # 创建 release 与 tag 需要
+
+concurrency:
+  group: nightly-standalone
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  # mock-cdn remote 资产只服务于 E2E/dev（extraResources 不引用它），
+  # 上游 Windows CI 同样跳过该步骤，避免 nightly 无谓拉长构建时间。
+  ZCODE_SKIP_REMOTE_ASSETS: "1"
+
+jobs:
+  build:
+    name: bundle ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest
+            target: mac-arm64
+            bundle-os: mac
+            bundle-arch: arm64
+          - runner: macos-latest
+            target: mac-x64
+            bundle-os: mac
+            bundle-arch: x64
+          - runner: windows-latest
+            target: win-x64
+            bundle-os: win
+            bundle-arch: x64
+          - runner: ubuntu-latest
+            target: linux-x64
+            bundle-os: linux
+            bundle-arch: x64
+    steps:
+      - name: Checkout standalone branch
+        uses: actions/checkout@v4
+        with:
+          ref: standalone
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4 # 从根 package.json 的 packageManager 读取版本
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.0 # 与 mise.toml 保持一致
+          cache: pnpm
+
+      - name: Cache Electron binaries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: electron-${{ matrix.target }}-v1
+          restore-keys: electron-${{ matrix.target }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # bundle.mjs 会依次执行 prepare:runtime-assets（按目标平台解包 native-search、
+      # 生成 bundled-agents/bundled-tools）→ desktop 生产构建 → electron-builder 打包 → 产物校验。
+      - name: Bundle desktop app
+        run: pnpm bundle:desktop -- --os ${{ matrix.bundle-os }} --arch ${{ matrix.bundle-arch }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: zcode-standalone-${{ matrix.target }}
+          path: |
+            packages/desktop/dist/*.dmg
+            packages/desktop/dist/*.zip
+            packages/desktop/dist/*.exe
+            packages/desktop/dist/*.AppImage
+            packages/desktop/dist/*.deb
+            packages/desktop/dist/*.rpm
+            packages/desktop/dist/*.pkg.tar.zst
+          if-no-files-found: error
+          retention-days: 3
+
+  release:
+    name: publish nightly release
+    needs: build
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Generate checksums
+        run: |
+          cd artifacts
+          find . -maxdepth 1 -type f ! -name 'SHA256SUMS.txt' -print0 \
+            | xargs -0 sha256sum > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Resolve nightly tag and commit
+        run: |
+          COMMIT=$(git ls-remote "https://github.com/${GITHUB_REPOSITORY}.git" refs/heads/standalone | cut -f1)
+          echo "STANDALONE_COMMIT=${COMMIT::12}" >> "$GITHUB_ENV"
+          # 打包时间以北京时间为准，保证 tag 日期与用户感知一致。
+          echo "NIGHTLY_TAG=nightly-$(TZ=Asia/Shanghai date +%Y%m%d)" >> "$GITHUB_ENV"
+          echo "NIGHTLY_DATE=$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M %Z')" >> "$GITHUB_ENV"
+
+      # 同一天重跑时先删掉旧 release/tag，保证 nightly 产物始终是最后一次成功构建。
+      - name: Remove stale same-day release
+        run: |
+          if gh release view "$NIGHTLY_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release delete "$NIGHTLY_TAG" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag
+          fi
+
+      - name: Create nightly release
+        run: |
+          cat > notes.md <<EOF
+          ## ZCode Nightly（standalone 分支）
+
+          - 构建时间：\`$NIGHTLY_DATE\`
+          - 来源分支：\`standalone\`
+          - 提交：\`$STANDALONE_COMMIT\`
+
+          ## 安装包
+
+          | 平台 | 文件 |
+          | ---- | ---- |
+          | macOS (Apple Silicon) | \*-mac-arm64.dmg |
+          | macOS (Intel) | \*-mac-x64.dmg |
+          | Windows x64 | \*-win-x64.exe |
+          | Linux x64 | \*.AppImage / \*.deb / \*.rpm / \*.pkg.tar.zst |
+
+          > 注意：本 nightly 为未签名构建。macOS 首次打开需在系统设置中放行，
+          > 或执行 \`xattr -dr com.apple.quarantine /Applications/ZCode.app\`。
+          > 完整校验值见 \`SHA256SUMS.txt\`。
+          EOF
+          gh release create "$NIGHTLY_TAG" artifacts/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target standalone \
+            --prerelease \
+            --title "Nightly $NIGHTLY_TAG (standalone)" \
+            --notes-file notes.md
+
+      # 只保留最近 7 个 nightly，避免 release 列表无限膨胀；清理失败不影响发布结果。
+      - name: Prune old nightly releases
+        continue-on-error: true
+        run: |
+          gh release list --repo "$GITHUB_REPOSITORY" --limit 100 --json tagName,createdAt \
+            --jq '[.[] | select(.tagName | startswith("nightly-"))] | sort_by(.createdAt) | reverse | .[7:][] | .tagName' \
+            | while read -r tag; do
+                echo "Deleting old nightly: $tag"
+                gh release delete "$tag" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag || true
+              done
