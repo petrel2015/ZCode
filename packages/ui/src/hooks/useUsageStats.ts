@@ -1,0 +1,77 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { AppUsageRange, AppUsageSnapshot } from "@zcode/shared";
+import { logger } from "@/logger.js";
+import { useServices } from "@/hooks/useServices.js";
+
+interface AppUsageStatsState {
+  snapshot: AppUsageSnapshot | null;
+  loading: boolean;
+  error: string | null;
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message || error.name || String(error);
+  }
+  if (typeof error === "object" && error !== null && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string" && message.length > 0) {
+      return message;
+    }
+  }
+  return String(error);
+}
+
+export function useAppUsageStats(range: AppUsageRange) {
+  const { zcodeAgentService } = useServices();
+  const [state, setState] = useState<AppUsageStatsState>({
+    snapshot: null,
+    loading: false,
+    error: null,
+  });
+  const requestVersionRef = useRef(0);
+
+  const refresh = useCallback(async () => {
+    const requestVersion = requestVersionRef.current + 1;
+    requestVersionRef.current = requestVersion;
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    setState((current) => ({
+      snapshot: current.snapshot,
+      loading: true,
+      error: null,
+    }));
+    try {
+      // App Usage 只聚合本地 session 库的真实统计，经 zcodeAgentService →
+      // v4 usage/stats → CLI usage store 读取；不经过任何平台 monitor API。
+      const snapshot = await zcodeAgentService.getAppUsageStats({
+        range,
+        timeZone,
+      });
+      if (requestVersionRef.current !== requestVersion) {
+        return;
+      }
+      setState({ snapshot, loading: false, error: null });
+    } catch (error) {
+      if (requestVersionRef.current !== requestVersion) {
+        return;
+      }
+      const message = getErrorMessage(error);
+      logger.warn("[useAppUsageStats] 读取本地使用统计失败", {
+        range,
+        timeZone,
+        error: message,
+      });
+      setState((current) => ({
+        snapshot: current.snapshot,
+        loading: false,
+        error: message,
+      }));
+    }
+  }, [range, zcodeAgentService]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  return { ...state, refresh };
+}

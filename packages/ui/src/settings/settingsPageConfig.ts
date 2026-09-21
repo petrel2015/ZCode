@@ -16,6 +16,7 @@ import {
   WandSparkles,
   Keyboard,
   FileSearch,
+  BarChart3,
 } from "lucide-react";
 import { isSettingsSectionEnabled, type SettingsSectionId } from "@/lib/settingsNavigation.js";
 import type { Theme } from "@/useTheme.js";
@@ -140,6 +141,13 @@ const BASE_SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
     icon: FileSearch,
     titleId: "settings.workspaceFileSearch.title",
     groupId: "basics",
+  },
+  // 使用统计（应用用量）：只读本地 session 库聚合，不含已随平台账号移除的 Coding Plan 用量。
+  {
+    id: "usage",
+    icon: BarChart3,
+    titleId: "settings.usageTitle",
+    groupId: "dataAndStats",
   },
 ];
 
