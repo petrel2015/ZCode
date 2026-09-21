@@ -35,6 +35,13 @@ function formatMilliseconds(locale: string, value: number | undefined): string {
   return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(value)} ms`;
 }
 
+function formatTps(locale: string, value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(value)) {
+    return "-";
+  }
+  return new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(value);
+}
+
 function formatTimestamp(locale: string, value: string | undefined, fallback: number): string {
   const parsedTimestamp = value ? Date.parse(value) : Number.NaN;
   const timestamp = Number.isFinite(parsedTimestamp) ? parsedTimestamp : fallback;
@@ -138,6 +145,18 @@ export function DeveloperToolsPane({
             <span>{intl.formatMessage({ id: "tokenDebug.summary.cacheRead" })}</span>
             <span className="font-mono text-foreground">
               {formatNumber(locale, debugState.cache?.totalCacheReadTokens)}
+            </span>
+            <span title={intl.formatMessage({ id: "tokenDebug.tpsDescription" })}>
+              {intl.formatMessage({ id: "tokenDebug.summary.avgTps" })}
+            </span>
+            <span className="font-mono text-foreground" data-testid="developer-tools-avg-tps">
+              {formatTps(locale, debugState.throughput?.avgTokensPerSecond)}
+            </span>
+            <span title={intl.formatMessage({ id: "tokenDebug.tpsDescription" })}>
+              {intl.formatMessage({ id: "tokenDebug.summary.lastTps" })}
+            </span>
+            <span className="font-mono text-foreground" data-testid="developer-tools-last-tps">
+              {formatTps(locale, debugState.throughput?.lastTokensPerSecond)}
             </span>
           </div>
           <div className="overflow-auto rounded-md border border-border">
