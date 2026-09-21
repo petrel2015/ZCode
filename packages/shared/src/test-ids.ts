@@ -551,6 +551,8 @@ export const TID_V4_ATTACHMENT_UPLOAD_PROGRESS = "v4-attachment-upload-progress"
 export const TID_V4_ATTACHMENT_UPLOAD_RETRY = "v4-attachment-upload-retry";
 /** v4 stop 按钮 */
 export const TID_V4_STOP = "v4-stop";
+/** v4 流式输出实时速率估算 chip（生成中可见，停滞/结束隐藏） */
+export const TID_V4_STREAM_RATE = "v4-stream-rate";
 /** v4 assistant 行 fork 按钮（动态后缀为 rowId） */
 export const TID_V4_FORK = "v4-fork";
 /** v4 assistant 行 retry 按钮（动态后缀为 rowId） */

@@ -168,6 +168,7 @@ import { useScopedConversationTelemetrySupervisor } from "@/v4/telemetry/Convers
 import type { ConversationPromptTelemetrySeed } from "@/v4/telemetry/conversationTelemetrySupervisor.js";
 import type { ComposerSubmissionConfig } from "@/v4/composer/composerSubmissionConfig.js";
 import { buildV4ConversationPromptTelemetryExtraDetail } from "@/v4/telemetry/conversationPromptTelemetry.js";
+import { StreamingTokenRateChip } from "@/v4/StreamingTokenRateChip.js";
 import { resolveAttachableShareContext } from "@/lib/conversationShareContext.js";
 
 const MODEL_SELECTION_LOADING_STATE: ModelSelectionState = { status: "loading" };
@@ -2282,7 +2283,14 @@ function ConversationComposerImpl({
           appSlashCommands={appSlashCommands}
           enableMentionPanel
           leadingActions={leadingActionsNode}
-          submitControl={submitControlNode}
+          // 速率 chip 独立于 memo 的 submitControlNode：估算每 500ms 变一次，
+          // 不能因此重建整簇 Tooltip/Select 子树，fragments 让两者成为同一 flex 行的兄弟节点。
+          submitControl={
+            <>
+              <StreamingTokenRateChip snapshot={snapshot} />
+              {submitControlNode}
+            </>
+          }
           className="p-0"
           onChange={handleEditorChange}
           onFocus={handleEditorFocus}
