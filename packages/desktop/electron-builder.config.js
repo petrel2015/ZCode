@@ -459,6 +459,9 @@ export default {
       name: "ZCode",
       email: "dev@zcode.z.ai",
     },
+    // fpm（deb/rpm）校验 homepage 元数据，缺失时 deb 在产物阶段直接失败；
+    // 与上方 author 一样在构建配置层补齐，不依赖外部注入。
+    homepage: "https://github.com/petrel2015/ZCode",
   },
   // macOS 签名阶段会对 Electron Framework 下每个语言包逐个 codesign。
   // 默认全量语言会产生大量 locale.pak 签名调用，显著拉长打包时长。
