@@ -14,12 +14,6 @@ import {
   ZCODE_RUNTIME_ENV_KEY,
   ZCODE_VERSION,
   buildZCodeToolEnvPassthroughEnv,
-  resolveRuntimeZCodeEndpointOrigin,
-  readProductEndpointEnv,
-  pickProductEndpointEnv,
-  resolveZaiBusinessBaseUrl,
-  resolveZaiOAuthClientId,
-  resolveZaiOAuthOrigin,
   normalizeDynamicWorkflowMode,
   readZCodeAgentTelemetryEnv,
   sanitizeZCodeRuntimeEnv,
@@ -80,7 +74,6 @@ export const runtimeSessionDataPath =
 // e2e 如果再用 app.setPath 覆盖 userData/sessionData，端口文件会被写到另一个目录，
 // 导致 Electron 已启动但 WebDriver session 一直创建失败。测试态打开该开关后保留 Chromedriver 的目录。
 export const hostModulePath = join(import.meta.dirname, "../host/index.js");
-export const schedulerModulePath = join(import.meta.dirname, "../scheduler/index.js");
 export function getCredentialsDir() {
   return getAppConfigDir();
 }
@@ -242,22 +235,6 @@ function resolveEnvValue(envName: string, localEnv: LocalRuntimeEnv = {}): strin
   return process.env[envName]?.trim() || localEnv[envName]?.trim() || undefined;
 }
 
-export function resolveZCodeEndpointEnvBaseOrigin(
-  localEnv: LocalRuntimeEnv = {},
-): string | undefined {
-  const buildEnv = readProductEndpointEnv();
-  // main 进程临时验证更新服务时不会重新写 .env，命令行传入的 endpoint 必须优先于本地文件。
-  return (
-    process.env["ZCODE_BASE_URL"]?.trim() ||
-    process.env["ZCODE_ENDPOINT_ORIGIN"]?.trim() ||
-    localEnv.ZCODE_BASE_URL?.trim() ||
-    localEnv.ZCODE_ENDPOINT_ORIGIN?.trim() ||
-    buildEnv.ZCODE_BASE_URL?.trim() ||
-    buildEnv.ZCODE_ENDPOINT_ORIGIN?.trim() ||
-    undefined
-  );
-}
-
 function readDefinedProcessEnv(): Record<string, string> {
   const values: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) {
@@ -269,20 +246,7 @@ function readDefinedProcessEnv(): Record<string, string> {
 }
 
 function applySelectedZCodeEnvLinks(env: Record<string, string>): Record<string, string> {
-  const endpointEnv = {
-    ...readProductEndpointEnv(),
-    ...env,
-    ZCODE_ENV,
-  };
-
-  return {
-    ...pickProductEndpointEnv(endpointEnv),
-    ...env,
-    ZCODE_BASE_URL: env.ZCODE_BASE_URL ?? resolveRuntimeZCodeEndpointOrigin(endpointEnv),
-    ZAI_OAUTH_ORIGIN: env.ZAI_OAUTH_ORIGIN ?? resolveZaiOAuthOrigin(endpointEnv),
-    ZAI_BUSINESS_BASE_URL: env.ZAI_BUSINESS_BASE_URL ?? resolveZaiBusinessBaseUrl(endpointEnv),
-    ZAI_OAUTH_CLIENT_ID: env.ZAI_OAUTH_CLIENT_ID ?? resolveZaiOAuthClientId(endpointEnv),
-  };
+  return env;
 }
 
 function resolveHostProcessNodeEnv(): ZCodeRuntimeEnv {

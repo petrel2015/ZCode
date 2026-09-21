@@ -1,4 +1,3 @@
-import armsRum from "@arms/rum-electron";
 import {
   ZCODE_VERSION,
   type DatabaseStartupState,
@@ -7,6 +6,7 @@ import {
 import { ensureDesktopDeviceMidSync } from "./desktopDeviceMid.js";
 import { buildFinalArmsCustomEventPayload } from "./desktopArmsCustomEvent.js";
 import { logger } from "./logger.js";
+import { logger as diagnosticLogger } from "./logger.js";
 
 const deviceMid = ensureDesktopDeviceMidSync();
 type Attempt = { lastStage: string; stageAt: number; databaseFinished: boolean; terminal: boolean };
@@ -39,11 +39,11 @@ function send(
         deviceMid,
         platform: process.platform,
         appVersion: ZCODE_VERSION,
-        armsEnv: armsRum.getConfig().env === "prod" ? "prod" : "local",
+        armsEnv: "local",
         rendererId: 0,
       },
     });
-    armsRum.sendCustom(payload as Parameters<typeof armsRum.sendCustom>[0]);
+    diagnosticLogger.debug("[local-diagnostics]", payload);
   } catch {
     /* 上报入口失败不能阻断启动或失败提示。 */
   }

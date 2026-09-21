@@ -5,13 +5,11 @@ import type {
   KeyboardEvent as ReactKeyboardEvent,
   PointerEvent as ReactPointerEvent,
 } from "react";
-import type { PanelImperativeHandle } from "react-resizable-panels";
 
 import { TID_APP_HEADER } from "@zcode/shared";
 // 保活：workspace tab 真正关闭时，按 workspaceKey 回收 side pane terminal 的常驻 PTY/xterm。
 // 对称下侧 Terminal.tsx 的 openWorkspaceKeys 回收。
 import { sidePaneTerminalSessionRegistry } from "@/terminal/sidePaneTerminalSessionRegistry.js";
-import { V4ChatPane } from "@/v4/V4ChatPane.js";
 import { V4WorkspaceChatArea } from "@/v4/V4WorkspaceChatArea.js";
 import {
   V4SplitPaneEntryProvider,
@@ -38,7 +36,7 @@ import { useIsOfficeMode } from "@/hooks/useInterfaceMode.js";
 import { GitBranchSwitcher } from "@/GitBranchSwitcher.js";
 import { ScopedErrorBoundary } from "@/ErrorBoundary.js";
 
-import { AUTOMATIONS_TOAST_ANCHOR_ID, AutomationsSection } from "@/settings/AutomationsSection.js";
+import { WORKFLOWS_TOAST_ANCHOR_ID, WorkflowsSection } from "@/settings/WorkflowsSection.js";
 import type {
   SavedWorkflowLaunchTarget,
   SavedWorkflowsOpenArtifactParams,
@@ -65,7 +63,6 @@ import {
   resolveWorkspaceShellWindowChromeClass,
 } from "@/app-shell/workspaceShellWindowChrome.js";
 import { cn } from "@/components/lib/utils.js";
-import { Button } from "@/components/ui/button.js";
 import { ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable.js";
 import { toast } from "@/components/ui/toast.js";
 import { getGitDirtyFileCount } from "@/git-branch-switcher/display.js";
@@ -192,10 +189,7 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
   workspaceReadOnlyReason,
   workspaceMainView,
   pluginStoreOpenVersion,
-  openAutomationId,
-  openAutomationTab,
   onWorkspaceMainViewChange,
-  onOpenAutomationConsumed,
   handleOpenAutomations,
   handleOpenPluginStore,
   handleManageInstalledPlugins,
@@ -215,7 +209,6 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
   onOpenWorkspace,
   onOpenFolderFromWorkspaceMenu,
   onOpenRemoteWorkspace,
-  onCreateScratchWorkspace,
   allowOpenWorkspace = true,
   allowRemoteWorkspace = true,
   remoteWorkspaceSessions = EMPTY_REMOTE_WORKSPACE_SESSIONS,
@@ -271,7 +264,6 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
   browserRestoreUrls,
   taskNativeSessionLogFile,
   taskSessionFile,
-  testMessages,
   conversationFindActiveIndex,
   conversationFindNavigationRequestId,
   conversationFindQuery,
@@ -299,7 +291,6 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
   handleToggleTerminal,
   handleToggleBrowser,
   handleOpenBrowserTab,
-  handleOpenTreemapping,
   handleOpenWhiteboard,
   handleOpenDeveloperTools,
   handleOpenTerminalTab,
@@ -1746,13 +1737,13 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                     <div className="min-h-0 flex-1 overflow-hidden">
                       {workspaceMainView === "automations" ? (
                         <main
-                          id={AUTOMATIONS_TOAST_ANCHOR_ID}
+                          id={WORKFLOWS_TOAST_ANCHOR_ID}
                           className="flex h-full min-h-0 flex-1 flex-col bg-background"
                         >
                           <AutomationsMainBreadcrumbFrame
                             isDesktop={Boolean(isDesktop)}
                             sectionLabel={intl.formatMessage({
-                              id: "settings.automations.title",
+                              id: "workflows.hub.sectionTitle",
                             })}
                             ariaLabel={intl.formatMessage({
                               id: "automations.breadcrumbLabel",
@@ -1770,27 +1761,13 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                                 className="min-h-full"
                               >
                                 <div className="mx-auto flex w-full max-w-5xl flex-col px-4 py-4 md:px-6 md:py-6">
-                                  <AutomationsSection
+                                  <WorkflowsSection
                                     workspacePath={workspaceAbsPath}
                                     workspaceIdentity={workspaceIdentity}
                                     onCreateViaChat={handleCreateAutomationInChat}
                                     onNavigateToLaunchedRun={handleNavigateToLaunchedRun}
                                     onOpenWorkflowRun={handleOpenSavedWorkflowRun}
                                     onOpenWorkflowArtifact={handleOpenSavedWorkflowArtifact}
-                                    openAutomationId={openAutomationId}
-                                    openAutomationTab={openAutomationTab}
-                                    onOpenAutomationConsumed={onOpenAutomationConsumed}
-                                    onOpenSession={({
-                                      sessionId,
-                                      workspacePath,
-                                      workspaceIdentity,
-                                    }) =>
-                                      handleSelectTaskInChat(
-                                        workspacePath,
-                                        sessionId,
-                                        workspaceIdentity,
-                                      )
-                                    }
                                   />
                                 </div>
                               </ScopedErrorBoundary>

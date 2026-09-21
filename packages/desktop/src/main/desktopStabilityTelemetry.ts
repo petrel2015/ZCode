@@ -1,6 +1,5 @@
 /* eslint-disable max-lines -- 稳定性上报集中单模块，拆分反而增加跨文件状态同步 */
 import { createHash, randomUUID } from "node:crypto";
-import armsRum from "@arms/rum-electron";
 import { BrowserWindow, type WebContents } from "electron";
 import {
   mapZCodeEnvToArmsRumEnv,
@@ -13,6 +12,7 @@ import {
 import type { CrashCapturePaths } from "./desktopCrashCapture.js";
 import { registerCrashEventMonitor as registerBaseCrashEventMonitor } from "./desktopCrashCapture.js";
 import { getResourceManagerWindowId } from "./resourceManagerWindow.js";
+import { logger as diagnosticLogger } from "./logger.js";
 
 /** ANR：主线程无响应阈值（与 Electron unresponsive 对齐） */
 const STABILITY_ANR_THRESHOLD_MS = 5_000;
@@ -448,7 +448,7 @@ function reportStabilityCustom(
   try {
     // ARMS 原始日志/控制台按 custom 类型展示；业务分组用 group
     // value 填具体数值：ANR/挂死为 duration_ms，退出为 exit_code，计数类统一为 1
-    armsRum.sendCustom({
+    diagnosticLogger.debug("[local-diagnostics]", {
       name,
       type: "custom",
       group: "stability",
@@ -478,7 +478,7 @@ export function reportAgentProcessExceptionToArms(
   try {
     // 根因：Electron collector 只监听自身进程，CLI 异常必须携带原始栈显式发送，
     // 不能先转成 console.error 包装字符串，也不能等待进程退出后再上报。
-    armsRum.sendEvent({
+    diagnosticLogger.debug("[local-diagnostics]", {
       event_type: "exception",
       type: "error",
       source: diagnostic.kind,
@@ -884,12 +884,6 @@ function attachWebContentsStabilityWatch(
 
 export function configureDesktopStabilityTelemetry(context: StabilityGlobalContext): void {
   globalContext = context;
-  armsRum.setConfig("properties", {
-    device_mid: context.deviceMid,
-    platform: normalizeOsCategory(context.platform),
-    app_version: context.appVersion,
-    arms_env: context.armsEnv,
-  });
 }
 
 /** 与 @arms/rum-electron pv-collector 的 initial_load 窗口对齐，避免早于首屏 PV 单独 flush */

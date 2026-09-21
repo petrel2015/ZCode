@@ -19,12 +19,6 @@ import {
 } from "./tui-prompt-handler-runtime.js";
 import { DEFAULT_CLI_CLEANUP_TIMEOUT_MS, runCliCleanupWithTimeout } from "./shutdown.js";
 import {
-  configureApiKeyForTui,
-  loginBigmodelForTui,
-  loginForTui,
-  logoutForTui,
-} from "./tui-auth.js";
-import {
   listCustomCommandsForTui,
   listSessionsForTui,
   listSkillsForTui,
@@ -140,7 +134,7 @@ export function createTuiSubmitPrompt(
       providerRegistryRuntime,
       sessionId,
       workingDirectory,
-    } = await prepareTuiAppRuntime(deps, version, request, processRuntime);
+    } = await prepareTuiAppRuntime(deps, request, processRuntime);
     const browserRuntime = createCliHeadlessBrowserRuntime({ browserExecutable, browserUse }, deps);
     let createdApp: Awaited<ReturnType<NonNullable<RunDependencies["createZCodeApp"]>>>;
     try {
@@ -264,9 +258,6 @@ export function createTuiSubmitPrompt(
     listCustomCommands: () => listCustomCommandsForTui(deps),
     listSessions: () => listSessionsForTui(deps),
     listSkills: () => listSkillsForTui(deps),
-    configureApiKey: (options) => configureApiKeyForTui(deps, options),
-    login: (options) => loginForTui(deps, options),
-    loginBigmodel: (options) => loginBigmodelForTui(deps, options),
     loadCustomCommand: (name) => loadCustomCommandForTui(deps, name),
     newApp,
     recordInputHistory: async (input, kind) => {
@@ -280,7 +271,6 @@ export function createTuiSubmitPrompt(
       }
       await runtime.modelSelectionConfigRepository.saveConfiguredDefault(selection);
     },
-    logout: () => logoutForTui(deps),
     setLocale: async (locale) => {
       if (app?.setLocale) {
         const result = await app.setLocale(locale);

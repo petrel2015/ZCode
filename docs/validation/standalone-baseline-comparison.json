@@ -1,0 +1,25 @@
+{
+  "baselineCommit": "872ad96",
+  "desktopTypes": {
+    "baseline": 86,
+    "current": 79,
+    "added": [],
+    "removed": 7
+  },
+  "cliLint": {
+    "baseline": 86,
+    "current": 86,
+    "added": [],
+    "rules": ["eslint(max-lines)"]
+  },
+  "documentationLinks": {
+    "baseline": 24,
+    "current": 21,
+    "added": [],
+    "removed": [
+      "README.en.md -> third-party/README.md",
+      "README.md -> third-party/README.md",
+      "config/README.md -> ../docs/ui/settings-community-link-config.md"
+    ]
+  }
+}

@@ -5,7 +5,6 @@ import type {
 } from "@zcode/adapters/model";
 import {
   resolveRuntimeZCodeEnv,
-  resolveRuntimeZCodeEndpointOrigin,
   ZCODE_APP_VERSION_ENV,
 } from "@zcode/shared";
 import {
@@ -53,7 +52,6 @@ function buildCliZCodeSourceHeaders(
   const locale = normalizePrintableHeaderValue(Intl.DateTimeFormat().resolvedOptions().locale);
   const timezone = normalizePrintableHeaderValue(Intl.DateTimeFormat().resolvedOptions().timeZone);
   return {
-    "HTTP-Referer": resolveRuntimeZCodeEndpointOrigin(env),
     "User-Agent": `ZCode/${appVersion ?? "unknown"}`,
     ...(appVersion ? { "X-ZCode-App-Version": appVersion } : {}),
     "X-Title": `Z Code@${sourceTitle}`,

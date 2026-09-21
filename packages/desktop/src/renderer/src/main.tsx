@@ -6,7 +6,6 @@ import {
   AppErrorBoundary,
   Root,
   GlobalDatabaseStartupLoading,
-  UpdateStatusWindowRoot,
   ZCodeIntlProvider,
   registerBaseWorkspaceServices,
   registerRemoteWorkspaceSession,
@@ -352,20 +351,7 @@ function initializeBusinessRoot(port: MessagePort): void {
 }
 
 window.addEventListener("message", handleServicePortMessage);
-if (windowKind !== "update-status") {
+{
   renderDatabaseStartup();
   sendStartupControl({ action: "snapshot" });
-}
-
-if (windowKind === "update-status") {
-  createRoot(document.getElementById("root")!).render(
-    <AppErrorBoundary isDesktop isMacDesktop={isMacDesktop} isWindowsDesktop={isWindowsDesktop}>
-      <StartupReadyNotifier />
-      <UpdateStatusWindowRoot
-        platform={desktopPlatform}
-        initialLocale={initialLocale}
-        onRequestClose={() => window.close()}
-      />
-    </AppErrorBoundary>,
-  );
 }
