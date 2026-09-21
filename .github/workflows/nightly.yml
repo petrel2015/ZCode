@@ -22,6 +22,9 @@ defaults:
     shell: bash
 
 env:
+  # 不设置时默认 test 后端，产物会变成 `ZCode Preview-...-TEST`；
+  # nightly 面向日常使用，显式切到 production 得到正式 `ZCode` 身份与无后缀文件名。
+  ZCODE_ENV: production
   # mock-cdn remote 资产只服务于 E2E/dev（extraResources 不引用它），
   # 上游 Windows CI 同样跳过该步骤，避免 nightly 无谓拉长构建时间。
   ZCODE_SKIP_REMOTE_ASSETS: "1"
