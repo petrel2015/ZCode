@@ -97,7 +97,6 @@ export * from "./zcode-session-task-status.js";
 export * from "./zcode-tool-projection-memory.js";
 export * from "./zcode-slash-command-help.js";
 export * from "./zcodeEndpoint.js";
-export * from "./zcode-source-headers.js";
 export * from "./zcode-agent-policy.js";
 export * from "./zcode-media-policy.js";
 export * from "./media-preview.js";
@@ -124,7 +123,6 @@ export * from "./desktopMenu.js";
 export * from "./feedback.js";
 export * from "./e2e-test-bridge.js";
 export * from "./remoteAppConfig.js";
-export * from "./helpAppConfig.js";
 export * from "./remoteAssetInstallMode.js";
 export * from "./onboardingRecord.js";
 export * from "./remoteResourcePackages.js";
@@ -304,3 +302,8 @@ export * from "./clientConfig.js";
 export * from "./pluginStoreOrdering.js";
 export * from "./session-debug.js";
 export { redactFeedbackText } from "./feedbackPrivacy.js";
+export {
+  assertIndependentEndpoint,
+  isRetiredPlatformUrl,
+  createIndependentFetch,
+} from "./retiredPlatform.js";

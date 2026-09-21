@@ -1,4 +1,3 @@
-import { pickProductEndpointEnv } from "@zcode/shared/zcodeEndpoint";
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -100,7 +99,6 @@ function createSharedDefines() {
     __ZCODE_COMMIT__: JSON.stringify(buildMetadata.buildCommitId),
     __ZCODE_BUILD_TIME__: JSON.stringify(buildMetadata.buildTime),
     __ZCODE_ENV__: JSON.stringify(zcodeEnv),
-    __ZCODE_ENDPOINT_ENV__: JSON.stringify(pickProductEndpointEnv(env)),
     __ZCODE_PRODUCT_FLAVOR__: JSON.stringify(zcodeProductFlavor),
     // Computer Use Helper build identity — helperInstaller 读它决定下载哪个 Helper bundle。
     // 缺失时 installer 抛 "Packaged ZCode is missing its embedded Computer Use Helper build identity"。
@@ -182,7 +180,6 @@ export default defineConfig([
     name: "preload",
     entry: {
       "preload/embeddedBrowserJavaScriptDialog": "src/preload/embeddedBrowserJavaScriptDialog.ts",
-      "preload/codingPlanWebview": "src/preload/codingPlanWebview.ts",
       "preload/browserVideoRecorder": "src/preload/browserVideoRecorder.ts",
       "preload/index": "src/preload/index.ts",
       "preload/resourceManager": "src/preload/resourceManager.ts",
@@ -232,34 +229,6 @@ export default defineConfig([
       options.chunkNames = "host/chunk-[hash]";
     },
     onSuccess: createDevReadyMarkerHook("host"),
-    ...desktopTsupBundleSecurityOptions,
-  },
-  {
-    name: "scheduler",
-    entry: { "scheduler/index": "src/scheduler/index.ts" },
-    outDir: "out",
-    format: "esm",
-    platform: "node",
-    target: "node22",
-    // 与 host 同构：常驻 cron scheduler 进程复用 @zcode/services（tasks-index + cron），
-    // 同样保留 undici 等为外部依赖，避免 Electron ESM runtime 的 dynamic require 崩溃。
-    external: desktopNodeRuntimeExternals,
-    noExternal: [
-      "@zcode/server",
-      "@zcode/shared",
-      "@zcode/rpc",
-      "@zcode/services",
-      "@zcode/client",
-      "@zcode/provider",
-      "@zcode/provider-node",
-      "@zcode/zcode-cua",
-    ],
-    define: createSharedDefines(),
-    esbuildOptions(options) {
-      applyDesktopTsupEsbuildSecurityOptions(options);
-      options.chunkNames = "scheduler/chunk-[hash]";
-    },
-    onSuccess: createDevReadyMarkerHook("scheduler"),
     ...desktopTsupBundleSecurityOptions,
   },
 ]);

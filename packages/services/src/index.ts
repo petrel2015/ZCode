@@ -27,7 +27,6 @@ export {
 export type { IServiceAccessor } from "./accessor.js";
 export {
   ConversationShareServiceError,
-  createUnsupportedConversationShareService,
   IConversationShareService,
 } from "./conversation-share/conversationShare.js";
 export type {
@@ -213,32 +212,12 @@ export type { SessionRealtimePort } from "./session/sessionRealtimePort.js";
 export { IFileWatcherService } from "./fileWatcher/fileWatcher.js";
 
 // OAuth service — IOAuthService is both a type (interface) and value (descriptor)
-export { IOAuthService } from "./oauth/oauth.js";
-
 // UsageStats service — IUsageStatsService is both a type (interface) and value (descriptor)
-export { IUsageStatsService } from "./usage-stats/usageStats.js";
-
 // Storage（资源管理器「存储」tab）：数据类型在 @zcode/shared；这里只导出服务接口与卷分组纯函数
 export type { IStorageService } from "./storage/contract.js";
 
 // CodingPlanSubscription service — ICodingPlanSubscriptionService is both a type (interface) and value (descriptor)
-export {
-  ICodingPlanSubscriptionService,
-  type OffPeakClientConfig,
-} from "./coding-plan-subscription/codingPlanSubscription.js";
-export {
-  IClientScenesService,
-  type ClientSceneConfig,
-  type ClientSceneItem,
-  type ClientSceneOption,
-  type ClientSceneResponseBody,
-  type ClientScenesResponse,
-} from "./client-scenes/clientScenes.js";
-export { isValidCronExpr } from "./session/automationCronValidation.js";
 // 闲时任务管理服务（与 automation 服务面独立）；接口/描述符 browser-safe。
-export { IOffPeakTaskService } from "./session/offPeakTask.js";
-export type { OffPeakUpdateTaskParams } from "./session/offPeakTask.js";
-
 // Skills service — ISkillsService is both a type (interface) and value (descriptor)
 export { ISkillsService } from "./skills/skills.js";
 export { ISkillSyncService } from "./skill-sync/skillSync.js";
@@ -271,9 +250,6 @@ export { ISubagentsService } from "./subagents/subagents.js";
 export { ICommandsService } from "./commands/commands.js";
 
 export { ISettingsSyncService } from "./settings-sync/settingsSync.js";
-
-export { IFeedbackService } from "./feedback/feedback.js";
-export type { FeedbackUploadProgress } from "./feedback/feedback.js";
 export { IPromptAttachmentTransferService } from "./prompt-attachment-transfer/promptAttachmentTransfer.js";
 export type {
   PromptAttachmentStageParams,
@@ -298,4 +274,3 @@ export type {
   FeedbackTicketSummary,
   FeedbackTicketType,
 } from "@zcode/shared";
-export { IClientConfigService } from "./client-config/clientConfig.js";

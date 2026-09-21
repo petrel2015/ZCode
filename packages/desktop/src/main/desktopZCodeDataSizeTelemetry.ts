@@ -1,4 +1,3 @@
-import armsRum from "@arms/rum-electron";
 import type { ArmsRumEnv, FinalArmsCustomEventPayload } from "@zcode/shared";
 
 import type { ZCodeDataSizeScanResult } from "./zcodeDataSizeScanner.js";
@@ -8,6 +7,7 @@ import {
   type ZCodeDataSizeTelemetryState,
 } from "./zcodeDataSizeTelemetryState.js";
 import { scanZCodeDataDirectoryInWorker } from "./zcodeDataSizeWorkerClient.js";
+import { logger as diagnosticLogger } from "./logger.js";
 
 export type { ZCodeDataSizeTelemetryState } from "./zcodeDataSizeTelemetryState.js";
 
@@ -411,7 +411,7 @@ export function registerDesktopZCodeDataSizeTelemetry(options: {
     readState: () => readZCodeDataSizeTelemetryState(options.stateFile),
     report: (result) => {
       const payload = buildZCodeDataSizeArmsPayload({ context: options.context, result });
-      armsRum.sendCustom({
+      diagnosticLogger.debug("[local-diagnostics]", {
         group: payload.group,
         name: payload.name,
         properties: payload.properties,

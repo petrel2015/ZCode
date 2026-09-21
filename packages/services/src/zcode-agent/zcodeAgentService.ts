@@ -16,7 +16,6 @@ import type {
   ModelSelectionView,
   ProviderSource,
 } from "@zcode/provider";
-import { completeNewModelSelection } from "@zcode/provider";
 import type { OffPeakClientConfig } from "#src/coding-plan-subscription/codingPlanSubscription.js";
 import {
   ZCODE_SESSION_RUNTIME_PREFERENCES_REQUEST_TIMEOUT_MS,
@@ -56,14 +55,6 @@ import {
   zcodePluginsUninstallResultSchema,
   zcodePluginsValidateResultSchema,
   zcodePluginsDescribeResultSchema,
-  zcodeAutomationCheckTaskBindingParamsSchema,
-  zcodeAutomationCreateParamsSchema,
-  zcodeAutomationDeleteParamsSchema,
-  zcodeAutomationListParamsSchema,
-  zcodeAutomationUpdateParamsSchema,
-  zcodeOffPeakCreateParamsSchema,
-  zcodeOffPeakListParamsSchema,
-  OFF_PEAK_PROVIDER_IDS,
   zcodeComputerUseOperationEventSchema,
   zcodeProviderRuntimeHeadersCancelledSchema,
   zcodeProviderRuntimeHeadersRequestParamsSchema,
@@ -111,7 +102,6 @@ import {
   type ZCodeMcpResourceSample,
   type ZCodeToolExecResource,
   type ZCodePluginOperationProgressNotification,
-  type ZCodeTaskMode,
 } from "@zcode/shared";
 import { createServiceLogger } from "#src/logger/serviceLogger.js";
 import { createOfficialMcpIssuanceAudit } from "#src/official-mcp/officialMcpIssuanceAudit.js";
@@ -193,11 +183,6 @@ import type {
   ZCodeAgentListMcpServerStatusesParams,
   ZCodeAgentWorkspaceTarget,
   ZCodeAgentCuaPermissionObservation,
-  ZCodeAgentCreateAutomationParams,
-  ZCodeAgentUpdateAutomationParams,
-  ZCodeAgentAutomationIdParams,
-  ZCodeAgentSetAutomationEnabledParams,
-  ZCodeAgentDeleteAutomationRunParams,
   ZCodeAgentAttachmentBeginParams,
   ZCodeAgentAttachmentChunkParams,
   ZCodeAgentAttachmentReadParams,
@@ -291,8 +276,6 @@ import {
   readTrustedZCodeAgentV4UnsubscribeRoute,
 } from "./zcodeAgentConnectionScope.js";
 import { createBackgroundSessionEventCoalescer } from "#src/zcode-agent/zcodeSessionEventCoalescer.js";
-import { AutomationService } from "#src/session/automationService.js";
-import { AutomationRepo } from "#src/session/automationRepo.js";
 import { TaskIndexRepo } from "#src/session/taskIndexRepo.js";
 import { ZCodeAgentMcpStatusModeUnsupportedError } from "#src/zcode-agent/zcodeAgentErrors.js";
 import { ZCodeAgentProcessManager } from "./zcodeAgentProcessManager.js";
@@ -937,117 +920,6 @@ interface CreateZCodeAgentServiceOptions extends Omit<
   ) => void;
 }
 
-function toProtocolAutomation(automation: ZCodeAutomation) {
-  return {
-    automationId: automation.automationId,
-    title: automation.title,
-    cronExpr: automation.cronExpr,
-    prompt: automation.prompt,
-    modelSelection: automation.modelSelection,
-    mode: automation.mode,
-    targetTaskId: automation.targetTaskId,
-    enabled: automation.enabled,
-    lifecycleStatus: automation.lifecycleStatus,
-    nextRunAt: automation.nextRunAt,
-    lastRunAt: automation.lastRunAt,
-    runCount: automation.runCount,
-    recurring: automation.recurring,
-    maxRuns: automation.maxRuns,
-    // 透传权威 scheduleRule；会话卡片必须读到本字段才能展示 cron 无法表达的真实间隔
-    // （如每50小时、每40天），否则只能从兼容 cronExpr 推断出「每小时的第00分」等错误展示。
-    scheduleRule: automation.scheduleRule,
-  };
-}
-
-function toProtocolOffPeakTaskSnapshot(task: {
-  offPeakTaskId: string;
-  title: string;
-  status: "queued" | "paused" | "running" | "completed" | "failed" | "cancelled";
-  queuePosition?: number;
-  sessionId?: string;
-  createdAt: number;
-}) {
-  // 协议最小面：不暴露 serverTicketId / providerName / workspace 细节。
-  return {
-    offPeakTaskId: task.offPeakTaskId,
-    title: task.title,
-    status: task.status,
-    ...(typeof task.queuePosition === "number" && task.queuePosition > 0
-      ? { queuePosition: task.queuePosition }
-      : {}),
-    ...(task.sessionId ? { sessionId: task.sessionId } : {}),
-    createdAt: task.createdAt,
-  };
-}
-
-const OFF_PEAK_INTERNAL_ERROR_CODE = "offpeak_internal_error";
-const OFF_PEAK_INTERNAL_ERROR_MESSAGE = "Internal off-peak service error";
-
-/**
- * offPeak/create、offPeak/list 的兜底 catch 不得把跨层异常文本（SQLite/文件路径/
- * 上游响应片段）原样回传协议——它会进入 CLI 日志与模型可见错误。原始错误只进服务端日志，
- * 对外固定稳定错误码 + 通用文案；业务失败分类仍走 respond({ok:false}) 不经此处。
- */
-async function respondOffPeakInternalError(
-  client: Pick<ZCodeProtocolClient, "respondError">,
-  request: { id: ZCodeProtocolRequestId; method: string },
-  workspace: ZCodeAgentWorkspaceTarget,
-  error: unknown,
-): Promise<void> {
-  logger.warn(undefined, "Off-peak 协议请求处理失败", {
-    method: request.method,
-    workspaceKey: resolveWorkspaceKey(workspace),
-    errorName: error instanceof Error ? error.name : typeof error,
-    message: error instanceof Error ? error.message : String(error),
-  });
-  await client.respondError(request.id, {
-    code: -32603,
-    message: OFF_PEAK_INTERNAL_ERROR_MESSAGE,
-    data: { errorCode: OFF_PEAK_INTERNAL_ERROR_CODE },
-  });
-}
-
-/** 只有灰度有效开启且白名单非空才算"可创建"；其余一律视为关闭（空数组）。 */
-function resolveOffPeakAllowedModels(
-  grayConfig: OffPeakClientConfig | undefined,
-  providerId?: string,
-): readonly string[] {
-  if (grayConfig?.enabled !== true) return [];
-  return grayConfig.modelSelectionView.providers
-    .filter((provider) => providerId === undefined || provider.providerId === providerId)
-    .flatMap((provider) => provider.models.map((model) => model.modelId));
-}
-
-/**
- * model 解析：省略 → 白名单末位（服务端顺序末位≈最新最强）；显式 → trim + 大小写不敏感匹配，
- * 命中返回白名单原写法，未命中返回 null（调用方回 model_not_allowed）。
- */
-function resolveOffPeakCreateModel(
-  allowedModels: readonly string[],
-  requested: string | undefined,
-): string | null {
-  const wanted = requested?.trim();
-  if (!wanted) return allowedModels[allowedModels.length - 1] ?? null;
-  const lower = wanted.toLowerCase();
-  return allowedModels.find((model) => model.trim().toLowerCase() === lower) ?? null;
-}
-
-/**
- * 新工具任务复用公共最高档补全；旧 metadata/型号特判会偏离 values 的语义顺序。
- * 显式档位留给 createTask 的现有校验，不在入口擅自换档。
- */
-function resolveOffPeakToolSelection(
-  view: ModelSelectionView,
-  providerId: string,
-  modelId: string,
-  thoughtLevel?: string,
-): ModelSelection | undefined {
-  const selection = completeNewModelSelection(view, { providerId, modelId });
-  if (!selection) return undefined;
-  return thoughtLevel === undefined
-    ? selection
-    : { ...selection, options: { reasoningLevel: thoughtLevel } };
-}
 export function createZCodeAgentService(
   options?: CreateZCodeAgentServiceOptions,
 ): IZCodeAgentService & { disposeAllAndWait(): Promise<void> } {
@@ -1070,8 +942,6 @@ export function createZCodeAgentService(
         })
       : undefined;
   // AutomationRepo 也持有 tasks-index.sqlite 连接，disposeAll 需一并收口（见下方 disposeAll 注释）
-  const automationRepo = new AutomationRepo();
-  const automationService = new AutomationService(automationRepo);
   const automationTaskIndexRepo = new TaskIndexRepo();
   const pluginProcessManager = new ZCodeAgentProcessManager({
     commandResolver: options?.commandResolver,
@@ -1171,8 +1041,6 @@ export function createZCodeAgentService(
   const activeClientsByWorkspaceKey = new Map<string, ActiveWorkspaceClient>();
   const interactionPreferenceSyncByWorkspaceKey = new Map<string, Promise<void>>();
   let latestAppRuntimePreferences: ZCodeAgentAppRuntimePreferences | undefined;
-  /** 动态工作流灰度门的进程内单次判定；见 resolveDynamicWorkflowGate 的注释。 */
-  let dynamicWorkflowGate: Promise<boolean> | undefined;
   const waitingWorkspaceStartups = new Map<string, WaitingWorkspaceStartup>();
   function cancelWaitingWorkspaceStartup(workspaceKey: string): void {
     const waiting = waitingWorkspaceStartups.get(workspaceKey);
@@ -2477,334 +2345,6 @@ export function createZCodeAgentService(
             });
           return;
         }
-
-        if (request.method === zcodeProtocolMethods.automationCreate) {
-          const parsed = zcodeAutomationCreateParamsSchema.safeParse(request.params);
-          if (!parsed.success) {
-            void client.respondError(request.id, {
-              code: -32602,
-              message: "Invalid automation create params",
-              data: parsed.error.flatten(),
-            });
-            return;
-          }
-          void (async () => {
-            try {
-              const automation = await automationService.create({
-                title: parsed.data.title ?? "",
-                cronExpr: parsed.data.cronExpr,
-                relativeDelayMinutes: parsed.data.relativeDelayMinutes,
-                // 会话侧长间隔 carrier（intervalUnit+interval）透传给 service 归一化为权威 scheduleRule。
-                intervalUnit: parsed.data.intervalUnit,
-                interval: parsed.data.interval,
-                prompt: parsed.data.prompt,
-                modelSelection: parsed.data.modelSelection,
-                mode: parsed.data.mode,
-                targetTaskId: parsed.data.targetTaskId,
-                workspacePath: workspace.workspacePath,
-                workspaceIdentity: workspace.workspaceIdentity,
-                recurring: parsed.data.recurring ?? true,
-                maxRuns: parsed.data.maxRuns,
-              });
-              if (automation.targetTaskId) {
-                const taskMeta = await automationTaskIndexRepo
-                  .getTaskMeta({
-                    workspacePath: automation.workspacePath,
-                    workspaceIdentity: automation.workspaceIdentity,
-                    taskId: automation.targetTaskId,
-                  })
-                  .catch(() => null);
-                if (taskMeta) {
-                  await automationTaskIndexRepo.syncTaskMeta({
-                    meta: {
-                      ...taskMeta,
-                      // 会话内创建的 automation 复用当前 session；显式写入标记供 V4 侧栏展示。
-                      cronAutomationId: automation.automationId,
-                      updatedAt: Math.max(taskMeta.updatedAt, Date.now()),
-                    },
-                  });
-                }
-              }
-              await client.respond(request.id, {
-                automation: toProtocolAutomation(automation),
-              });
-            } catch (error) {
-              await client.respondError(request.id, {
-                code: -32603,
-                message: error instanceof Error ? error.message : String(error),
-              });
-            }
-          })();
-          return;
-        }
-
-        if (request.method === zcodeProtocolMethods.offPeakCreate) {
-          const parsed = zcodeOffPeakCreateParamsSchema.safeParse(request.params);
-          if (!parsed.success) {
-            void client.respondError(request.id, {
-              code: -32602,
-              message: "Invalid off-peak create params",
-              data: parsed.error.flatten(),
-            });
-            return;
-          }
-          void (async () => {
-            try {
-              const offPeakTaskService = options?.resolveOffPeakTaskService?.();
-              if (!offPeakTaskService) {
-                await client.respondError(request.id, {
-                  code: -32601,
-                  message: "Off-peak task service is unavailable on this host",
-                });
-                return;
-              }
-              const grayConfig = await options
-                ?.resolveOffPeakClientConfig?.()
-                .catch(() => undefined);
-              // 工具注册后灰度被关闭/配置解析失败时，不能继续走"白名单为空"的推导
-              // （显式 model 会误报 model_not_allowed，省略 model 会以空模型落库）；直接返回稳定分类。
-              // 模型视图可同时包含两个域；必须用已有支持快照确认归属，不能从首个 Provider 猜。
-              const support =
-                resolveOffPeakAllowedModels(grayConfig).length > 0
-                  ? await offPeakTaskService.getCodingPlanSupport()
-                  : undefined;
-              const providerId = support?.supported
-                ? OFF_PEAK_PROVIDER_IDS[support.providerFamily]
-                : undefined;
-              const allowedModels = providerId
-                ? resolveOffPeakAllowedModels(grayConfig, providerId)
-                : [];
-              if (allowedModels.length === 0) {
-                await client.respond(request.id, {
-                  ok: false,
-                  failureStage: "client_validation",
-                  errorCategory: "client_validation",
-                  errorCode: "offpeak_disabled",
-                });
-                return;
-              }
-              // model 白名单预校：显式入参不在白名单返回稳定分类，
-              // 复用 client_validation 分类 + 专用 errorCode，不扩分类枚举。
-              // 匹配与 thoughtLevel/UI 同语义（trim + 大小写不敏感），命中后回写白名单原写法。
-              const model = resolveOffPeakCreateModel(allowedModels, parsed.data.model);
-              if (model === null) {
-                await client.respond(request.id, {
-                  ok: false,
-                  failureStage: "client_validation",
-                  errorCategory: "client_validation",
-                  errorCode: "model_not_allowed",
-                });
-                return;
-              }
-              const modelSelection =
-                grayConfig && providerId
-                  ? resolveOffPeakToolSelection(
-                      grayConfig.modelSelectionView,
-                      providerId,
-                      model,
-                      parsed.data.thoughtLevel,
-                    )
-                  : undefined;
-              if (!modelSelection) {
-                await client.respond(request.id, {
-                  ok: false,
-                  failureStage: "client_validation",
-                  errorCategory: "client_validation",
-                  errorCode: "model_not_allowed",
-                });
-                return;
-              }
-              const result = await offPeakTaskService.createTask({
-                title: parsed.data.title,
-                prompt: parsed.data.prompt,
-                permissionMode: parsed.data.permissionMode ?? "yolo",
-                modelSelection,
-                // 会话内创建绑定当前会话，派发时 resume 该会话执行。
-                ...(parsed.data.boundSessionId
-                  ? { boundSessionId: parsed.data.boundSessionId }
-                  : {}),
-                // workspace 由 host 从当前 session 注入（对称 automation/create），不进协议参数。
-                workspacePath: workspace.workspacePath,
-                ...(workspace.workspaceIdentity
-                  ? { workspaceIdentity: workspace.workspaceIdentity }
-                  : {}),
-              });
-              if (!result.ok) {
-                // 失败分类原样过协议（不 respondError），供 CLI handler 翻译为稳定错误。
-                await client.respond(request.id, {
-                  ok: false,
-                  failureStage: result.failureStage,
-                  errorCategory: result.errorCategory,
-                  errorCode: result.errorCode,
-                });
-                return;
-              }
-              await client.respond(request.id, {
-                ok: true,
-                task: toProtocolOffPeakTaskSnapshot(result.task),
-              });
-            } catch (error) {
-              await respondOffPeakInternalError(client, request, workspace, error);
-            }
-          })();
-          return;
-        }
-
-        if (request.method === zcodeProtocolMethods.offPeakList) {
-          const parsed = zcodeOffPeakListParamsSchema.safeParse(request.params ?? {});
-          if (!parsed.success) {
-            void client.respondError(request.id, {
-              code: -32602,
-              message: "Invalid off-peak list params",
-              data: parsed.error.flatten(),
-            });
-            return;
-          }
-          void (async () => {
-            try {
-              const offPeakTaskService = options?.resolveOffPeakTaskService?.();
-              if (!offPeakTaskService) {
-                await client.respondError(request.id, {
-                  code: -32601,
-                  message: "Off-peak task service is unavailable on this host",
-                });
-                return;
-              }
-              const workspaceKey = resolveWorkspaceKey(workspace);
-              const tasks = (await offPeakTaskService.list())
-                .filter((task) => task.workspaceKey === workspaceKey)
-                .sort((a, b) => b.createdAt - a.createdAt)
-                .slice(0, 20);
-              await client.respond(request.id, {
-                tasks: tasks.map(toProtocolOffPeakTaskSnapshot),
-              });
-            } catch (error) {
-              await respondOffPeakInternalError(client, request, workspace, error);
-            }
-          })();
-          return;
-        }
-
-        if (request.method === zcodeProtocolMethods.automationList) {
-          const parsed = zcodeAutomationListParamsSchema.safeParse(request.params ?? {});
-          if (!parsed.success) {
-            void client.respondError(request.id, {
-              code: -32602,
-              message: "Invalid automation list params",
-              data: parsed.error.flatten(),
-            });
-            return;
-          }
-          void (async () => {
-            try {
-              const automations = await automationService.list(workspace);
-              await client.respond(request.id, {
-                automations: automations.map(toProtocolAutomation),
-              });
-            } catch (error) {
-              await client.respondError(request.id, {
-                code: -32603,
-                message: error instanceof Error ? error.message : String(error),
-              });
-            }
-          })();
-          return;
-        }
-
-        if (request.method === zcodeProtocolMethods.automationCheckTaskBinding) {
-          const parsed = zcodeAutomationCheckTaskBindingParamsSchema.safeParse(request.params);
-          if (!parsed.success) {
-            void client.respondError(request.id, {
-              code: -32602,
-              message: "Invalid automation task binding params",
-              data: parsed.error.flatten(),
-            });
-            return;
-          }
-          void (async () => {
-            try {
-              const bound = await automationService.hasTaskBinding({
-                workspacePath: workspace.workspacePath,
-                workspaceIdentity: workspace.workspaceIdentity,
-                targetTaskId: parsed.data.targetTaskId,
-              });
-              await client.respond(request.id, { bound });
-            } catch (error) {
-              await client.respondError(request.id, {
-                code: -32603,
-                message: error instanceof Error ? error.message : String(error),
-              });
-            }
-          })();
-          return;
-        }
-
-        if (request.method === zcodeProtocolMethods.automationUpdate) {
-          const parsed = zcodeAutomationUpdateParamsSchema.safeParse(request.params);
-          if (!parsed.success) {
-            void client.respondError(request.id, {
-              code: -32602,
-              message: "Invalid automation update params",
-              data: parsed.error.flatten(),
-            });
-            return;
-          }
-          void (async () => {
-            try {
-              const automation = await automationService.update(
-                parsed.data.automationId,
-                {
-                  title: parsed.data.title,
-                  cronExpr: parsed.data.cronExpr,
-                  prompt: parsed.data.prompt,
-                  recurring: parsed.data.recurring,
-                  maxRuns: parsed.data.maxRuns,
-                  // 会话侧长间隔 carrier（intervalUnit+interval）透传给 service 归一化为权威 scheduleRule。
-                  intervalUnit: parsed.data.intervalUnit,
-                  interval: parsed.data.interval,
-                },
-                workspace,
-              );
-              if (!automation) {
-                throw new Error("Scheduled task not found in the current workspace.");
-              }
-              await client.respond(request.id, {
-                automation: toProtocolAutomation(automation),
-              });
-            } catch (error) {
-              await client.respondError(request.id, {
-                code: -32603,
-                message: error instanceof Error ? error.message : String(error),
-              });
-            }
-          })();
-          return;
-        }
-
-        if (request.method === zcodeProtocolMethods.automationDelete) {
-          const parsed = zcodeAutomationDeleteParamsSchema.safeParse(request.params);
-          if (!parsed.success) {
-            void client.respondError(request.id, {
-              code: -32602,
-              message: "Invalid automation delete params",
-              data: parsed.error.flatten(),
-            });
-            return;
-          }
-          void (async () => {
-            try {
-              const deleted = await automationService.delete(parsed.data.automationId, workspace);
-              await client.respond(request.id, { deleted });
-            } catch (error) {
-              await client.respondError(request.id, {
-                code: -32603,
-                message: error instanceof Error ? error.message : String(error),
-              });
-            }
-          })();
-          return;
-        }
-
         void client.respondError(request.id, {
           code: -32601,
           message: `Unsupported ZCode Protocol request: ${request.method}`,
@@ -2846,7 +2386,7 @@ export function createZCodeAgentService(
     };
   } {
     const workspaceKey = resolveWorkspaceKey(params.workspace);
-    const error = new Error("当前没有可用的模型供应商和模型，请先登录或配置 API Key。") as Error & {
+    const error = new Error("当前没有可用的模型供应商和模型，请先配置模型和 API Key。") as Error & {
       code: typeof ZCODE_AGENT_PROVIDER_NOT_READY_CODE;
       data: {
         providerCount: number;
@@ -3252,19 +2792,7 @@ export function createZCodeAgentService(
    * 与 Off-Peak 不同：远程 workspace 同样可用，所以这里不看 workspaceIdentity / remoteSessionId。
    */
   function resolveDynamicWorkflowGate(): Promise<boolean> {
-    const resolve = options?.resolveDynamicWorkflowClientConfig;
-    if (!resolve) return Promise.resolve(false);
-    dynamicWorkflowGate ??= (async () => {
-      try {
-        return (await resolve())?.enabled === true;
-      } catch (error) {
-        logger.warn(undefined, "动态工作流灰度读取失败，按关闭处理", {
-          errorMessage: error instanceof Error ? error.message : String(error),
-        });
-        return false;
-      }
-    })();
-    return dynamicWorkflowGate;
+    return Promise.resolve(true);
   }
 
   async function buildConversationCommandEnvelope(
@@ -4236,109 +3764,6 @@ export function createZCodeAgentService(
         zcodePluginsSetEnabledResultSchema,
         { timeoutMs: PLUGIN_MANAGEMENT_REQUEST_TIMEOUT_MS },
       );
-    },
-
-    async listAutomations(params: ZCodeAgentWorkspaceTarget) {
-      return automationService.list(params);
-    },
-
-    async listAllAutomations() {
-      return automationService.list();
-    },
-
-    async createAutomation(params: ZCodeAgentCreateAutomationParams) {
-      return automationService.create({
-        title: params.title,
-        cronExpr: params.cronExpr,
-        relativeDelayMinutes: params.relativeDelayMinutes,
-        prompt: params.prompt,
-        modelSelection: params.modelSelection,
-        mode: params.mode as ZCodeTaskMode | undefined,
-        workspacePath: params.workspacePath,
-        workspaceIdentity: params.workspaceIdentity,
-        recurring: params.recurring ?? true,
-        maxRuns: params.maxRuns,
-        endAt: params.endAt,
-        scheduleRule: params.scheduleRule,
-      });
-    },
-
-    async updateAutomation(params: ZCodeAgentUpdateAutomationParams) {
-      return automationService.update(
-        params.automationId,
-        {
-          title: params.title,
-          cronExpr: params.cronExpr,
-          prompt: params.prompt,
-          modelSelection: params.modelSelection,
-          mode: params.mode === null ? null : (params.mode as ZCodeTaskMode | undefined),
-          recurring: params.recurring,
-          maxRuns: params.maxRuns,
-          endAt: params.endAt,
-          scheduleRule: params.scheduleRule,
-          scheduleEditedByUser: params.scheduleEditedByUser,
-        },
-        // 归属校验：写操作必须限定在调用方当前 workspace，禁止跨 workspace 越权。
-        {
-          workspacePath: params.workspacePath,
-          workspaceIdentity: params.workspaceIdentity,
-        },
-      );
-    },
-
-    async deleteAutomation(params: ZCodeAgentAutomationIdParams) {
-      await automationService.delete(params.automationId, {
-        workspacePath: params.workspacePath,
-        workspaceIdentity: params.workspaceIdentity,
-      });
-    },
-
-    async setAutomationEnabled(params: ZCodeAgentSetAutomationEnabledParams) {
-      return automationService.setEnabled(params.automationId, params.enabled, {
-        workspacePath: params.workspacePath,
-        workspaceIdentity: params.workspaceIdentity,
-      });
-    },
-
-    async restartAutomation(params: ZCodeAgentAutomationIdParams) {
-      return automationService.restart(params.automationId, {
-        workspacePath: params.workspacePath,
-        workspaceIdentity: params.workspaceIdentity,
-      });
-    },
-
-    async runAutomationNow(params: ZCodeAgentAutomationIdParams) {
-      const dispatch = options?.onAutomationManualRunRequested;
-      if (!dispatch) {
-        // runNow 会先写 manual run 并占用 single-flight claim；dispatcher
-        // 缺失是同步可判定的配置错误，必须在认领前失败，不能依赖 stale 崩溃回收。
-        throw new Error("Automation immediate dispatcher is unavailable.");
-      }
-      const claimed = await automationService.runNow(params.automationId, {
-        workspacePath: params.workspacePath,
-        workspaceIdentity: params.workspaceIdentity,
-      });
-      if (!claimed) {
-        // single-flight 已拒绝重复运行时，旧的空成功返回会被 UI 误判为
-        // 新 run 已入队，导致每次重复点击都展示一次“已触发”。
-        return { status: "duplicate" as const };
-      }
-      await dispatch(claimed);
-      return { status: "queued" as const };
-    },
-
-    async listAutomationRuns(params: ZCodeAgentAutomationIdParams) {
-      return automationService.listRuns(params.automationId, {
-        workspacePath: params.workspacePath,
-        workspaceIdentity: params.workspaceIdentity,
-      });
-    },
-
-    async deleteAutomationRun(params: ZCodeAgentDeleteAutomationRunParams) {
-      return automationService.deleteRun(params.runId, {
-        workspacePath: params.workspacePath,
-        workspaceIdentity: params.workspaceIdentity,
-      });
     },
 
     async generateWorkspaceText(params: ZCodeAgentGenerateWorkspaceTextParams) {
@@ -5627,7 +5052,6 @@ export function createZCodeAgentService(
       mcpStatusProcessManager.disposeAll();
       // automation 专用的 AutomationRepo / TaskIndexRepo 各持 tasks-index.sqlite
       // 连接句柄，dispose 后必须收口，否则 Windows 上句柄悬着（临时目录清理撞 EBUSY）
-      automationRepo.close();
       automationTaskIndexRepo.close();
       disposeLocalState();
     },
@@ -5638,7 +5062,6 @@ export function createZCodeAgentService(
         pluginProcessManager.disposeAllAndWait(),
         mcpStatusProcessManager.disposeAllAndWait(),
       ]);
-      automationRepo.close();
       automationTaskIndexRepo.close();
       disposeLocalState();
     },

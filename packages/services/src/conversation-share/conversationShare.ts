@@ -1,15 +1,7 @@
 /* oxlint-disable eslint(max-lines) -- Share 的错误/预检公共契约与跨 RPC 脱敏规则必须保持在同一边界，避免 UI、Host 和 API 各自漂移。 */
-import type {
-  ConversationShareAccessMode,
-  ConversationShareCapabilities,
-  ConversationShareContinuation,
-  ConversationSharePreview,
-  ConversationShareRecord,
-  Locale,
-} from "@zcode/shared";
+import type { ConversationShareAccessMode, Locale } from "@zcode/shared";
 import { ServiceChannels } from "@zcode/shared";
 import type { ConversationRow } from "@zcode/shared/zcode-protocol-v4";
-import { Event as RpcEvent, type Event } from "@zcode/rpc";
 
 import { createServiceDescriptor } from "../descriptors.js";
 import type { ConversationShareClientErrorKind } from "./conversationShareHttpClient.js";
@@ -422,61 +414,13 @@ export interface ImportConversationShareResult {
 }
 
 export interface IConversationShareService {
-  getCapabilities(): Promise<ConversationShareCapabilities>;
-  preflight(input: ConversationSharePreflightInput): Promise<ConversationSharePreflightResult>;
-  publish(
-    input: PublishTextConversationInput,
-    operationId: string,
-  ): Promise<ConversationShareRecord>;
-  onDynamicPublishProgress(operationId: string): Event<ConversationSharePublishProgress>;
-  importShare(
-    input: ImportConversationShareInput,
-    operationId: string,
-  ): Promise<ImportConversationShareResult>;
-  onDynamicImportProgress(operationId: string): Event<ConversationShareImportProgress>;
   /** 读取导入时落盘的公开 rows；找不到返回 null（会话里就不渲染只读块）。 */
   getImportedConversation(input: {
     workspacePath: string;
     contextId: string;
   }): Promise<ImportedConversationShare | null>;
-  getPreview(shareCode: string): Promise<ConversationSharePreview>;
-  getContinuation(input: {
-    shareCode: string;
-    clientRequestId: string;
-  }): Promise<ConversationShareContinuation>;
 }
 
 export const IConversationShareService = createServiceDescriptor<IConversationShareService>(
   ServiceChannels.ConversationShare,
 );
-
-/**
- * 分享能力不可用时的统一门禁实现。
- *
- * 每个不支持分享的宿主（desktop-attached remote、server remote 等）都要拒绝全部
- * 写操作并返回空事件流。手写会让 IConversationShareService 新增方法时漏改某个宿主，
- * 所以由这里集中生成。
- */
-export function createUnsupportedConversationShareService(options: {
-  message: string;
-  /** 可选审计钩子：宿主想记录被拒绝的动作名时传入。 */
-  onRejected?: (action: string) => void;
-}): IConversationShareService {
-  const reject = (action: string) => async (): Promise<never> => {
-    options.onRejected?.(action);
-    throw new ConversationShareServiceError("feature_disabled", options.message);
-  };
-  const noEvents = () => RpcEvent.None;
-  return {
-    getCapabilities: reject("getCapabilities"),
-    preflight: reject("preflight"),
-    publish: reject("publish"),
-    onDynamicPublishProgress: noEvents,
-    importShare: reject("importShare"),
-    onDynamicImportProgress: noEvents,
-    // 只读查询：不可用环境下返回 null 而不是抛错，会话里就是不渲染只读块。
-    getImportedConversation: async () => null,
-    getPreview: reject("getPreview"),
-    getContinuation: reject("getContinuation"),
-  };
-}

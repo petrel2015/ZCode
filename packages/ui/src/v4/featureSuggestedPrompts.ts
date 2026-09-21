@@ -7,9 +7,6 @@ import pdfIcon from "@/assets/plugin-icons/pdf.png";
 import presentationsIcon from "@/assets/plugin-icons/presentations.png";
 import spreadsheetsIcon from "@/assets/plugin-icons/spreadsheets.png";
 import type { DraftSuggestedPromptItem } from "@/v4/draftSuggestedPromptItems.js";
-
-const ASSETS = "https://cdn-zcode.z.ai/zcode/official-plugin/assets";
-
 type FeatureRecommendedPrompt = DraftSuggestedPromptItem & {
   mode: "office" | "coding";
 };
@@ -32,7 +29,6 @@ export const featureSuggestedPrompts: FeatureRecommendedPrompt[] = [
   {
     id: "feature-recvvsQoVaqVGC",
     mode: "office",
-    iconUrl: `${ASSETS}/browser-use/icon.png`,
     iconStyle: "plugin",
     label: {
       cn: "每天推送我关注方向的最新新闻并生成简报",
@@ -50,7 +46,6 @@ export const featureSuggestedPrompts: FeatureRecommendedPrompt[] = [
   {
     id: "feature-office-browser-business-reading",
     mode: "office",
-    iconUrl: `${ASSETS}/browser-use/icon.png`,
     iconStyle: "plugin",
     label: {
       cn: "帮我挑出今天值得读的三篇商业文章",
@@ -68,7 +63,6 @@ export const featureSuggestedPrompts: FeatureRecommendedPrompt[] = [
   {
     id: "feature-office-browser-work-reading",
     mode: "office",
-    iconUrl: `${ASSETS}/browser-use/icon.png`,
     iconStyle: "plugin",
     label: {
       cn: "帮我找几篇能用在工作中的好文章",
@@ -86,7 +80,6 @@ export const featureSuggestedPrompts: FeatureRecommendedPrompt[] = [
   {
     id: "feature-office-browser-economic-data",
     mode: "office",
-    iconUrl: `${ASSETS}/browser-use/icon.png`,
     iconStyle: "plugin",
     label: {
       cn: "帮我看懂最近公布的重要经济数据",
@@ -139,7 +132,6 @@ export const featureSuggestedPrompts: FeatureRecommendedPrompt[] = [
   {
     id: "feature-recvvsS2usyGu7",
     mode: "office",
-    iconUrl: `${ASSETS}/zcode-cua/icon.png`,
     iconStyle: "plugin",
     label: {
       cn: "帮我设置一个闲时任务，体验网站的完整用户旅程",
@@ -254,7 +246,6 @@ export const featureSuggestedPrompts: FeatureRecommendedPrompt[] = [
   {
     id: "feature-recvvsPdvclWR1",
     mode: "office",
-    iconUrl: `${ASSETS}/zcode-cua/icon.png`,
     iconStyle: "plugin",
     label: {
       cn: "帮我把下载文件夹里的截图按月份批量归档",
@@ -272,7 +263,6 @@ export const featureSuggestedPrompts: FeatureRecommendedPrompt[] = [
   {
     id: "feature-recvvsV4e4aOFp",
     mode: "office",
-    iconUrl: `${ASSETS}/wind/icon.png`,
     iconStyle: "plugin",
     label: {
       cn: "用 Wind 看一个行业最近发生了什么变化",
@@ -290,7 +280,6 @@ export const featureSuggestedPrompts: FeatureRecommendedPrompt[] = [
   {
     id: "feature-recvvsV4e4bCq1",
     mode: "office",
-    iconUrl: `${ASSETS}/wind/icon.png`,
     iconStyle: "plugin",
     label: {
       cn: "用 Wind 梳理一家公司的经营与市场表现",
@@ -308,7 +297,6 @@ export const featureSuggestedPrompts: FeatureRecommendedPrompt[] = [
   {
     id: "feature-recvvsV4e4ivrd",
     mode: "office",
-    iconUrl: `${ASSETS}/hexin/icon.png`,
     iconStyle: "plugin",
     label: {
       cn: "用同花顺 iFinD 比较一个行业的龙头公司",
@@ -326,7 +314,6 @@ export const featureSuggestedPrompts: FeatureRecommendedPrompt[] = [
   {
     id: "feature-recvvsV4e4g9yq",
     mode: "office",
-    iconUrl: `${ASSETS}/hexin/icon.png`,
     iconStyle: "plugin",
     label: {
       cn: "用同花顺 iFinD 整理一家公司的重要公告",
@@ -344,7 +331,6 @@ export const featureSuggestedPrompts: FeatureRecommendedPrompt[] = [
   {
     id: "feature-recvvsV4e4AtLY",
     mode: "office",
-    iconUrl: `${ASSETS}/tianyancha/icon.png`,
     iconStyle: "plugin",
     label: {
       cn: "用天眼查摸清一家企业的股权与经营风险",
@@ -362,7 +348,6 @@ export const featureSuggestedPrompts: FeatureRecommendedPrompt[] = [
   {
     id: "feature-recvvsV4e4Hsa3",
     mode: "office",
-    iconUrl: `${ASSETS}/tianyancha/icon.png`,
     iconStyle: "plugin",
     label: {
       cn: "用天眼查核对一家企业的关联公司和人员",
@@ -380,7 +365,6 @@ export const featureSuggestedPrompts: FeatureRecommendedPrompt[] = [
   {
     id: "feature-recvvsV4e4FqWU",
     mode: "office",
-    iconUrl: `${ASSETS}/wind/icon.png`,
     iconStyle: "plugin",
     label: {
       cn: "结合 Wind、同花顺和天眼查研究一家企业",
@@ -407,7 +391,6 @@ export const featureSuggestedPrompts: FeatureRecommendedPrompt[] = [
   {
     id: "feature-coding-branch-review",
     mode: "coding",
-    iconUrl: `${ASSETS}/gitlab/icon.png`,
     iconStyle: "plugin",
     label: {
       cn: "帮我检查当前分支提交前的问题",
@@ -434,7 +417,6 @@ export const featureSuggestedPrompts: FeatureRecommendedPrompt[] = [
   {
     id: "feature-coding-mr-summary",
     mode: "coding",
-    iconUrl: `${ASSETS}/gitlab/icon.png`,
     iconStyle: "plugin",
     label: {
       cn: "帮我整理当前分支的 MR 描述",
@@ -461,7 +443,6 @@ export const featureSuggestedPrompts: FeatureRecommendedPrompt[] = [
   {
     id: "feature-recvvsWf8gXmsB",
     mode: "coding",
-    iconUrl: `${ASSETS}/github/icon.png`,
     iconStyle: "plugin",
     label: {
       cn: "帮我设置一个闲时任务，全面验证仓库的测试覆盖",
@@ -475,7 +456,6 @@ export const featureSuggestedPrompts: FeatureRecommendedPrompt[] = [
   {
     id: "feature-recvvsWf8g0Cg0",
     mode: "coding",
-    iconUrl: `${ASSETS}/github/icon.png`,
     iconStyle: "plugin",
     label: {
       cn: "帮我设置一个闲时任务，读透仓库并画出功能地图",
@@ -489,7 +469,6 @@ export const featureSuggestedPrompts: FeatureRecommendedPrompt[] = [
   {
     id: "feature-recvvsWf8grDkJ",
     mode: "coding",
-    iconUrl: `${ASSETS}/github/icon.png`,
     iconStyle: "plugin",
     label: {
       cn: "帮我设置一个闲时任务，深查仓库潜在问题",
@@ -503,7 +482,6 @@ export const featureSuggestedPrompts: FeatureRecommendedPrompt[] = [
   {
     id: "feature-coding-browser-deployed",
     mode: "coding",
-    iconUrl: `${ASSETS}/browser-use/icon.png`,
     iconStyle: "plugin",
     label: {
       cn: "帮我检查刚部署的网站有没有明显错误",
@@ -521,7 +499,6 @@ export const featureSuggestedPrompts: FeatureRecommendedPrompt[] = [
   {
     id: "feature-coding-scheduled-ci",
     mode: "coding",
-    iconUrl: `${ASSETS}/gitlab/icon.png`,
     iconStyle: "plugin",
     label: {
       cn: "每天检查当前仓库有没有新的 CI 失败",
@@ -535,7 +512,6 @@ export const featureSuggestedPrompts: FeatureRecommendedPrompt[] = [
   {
     id: "feature-coding-scheduled-weekly-changes",
     mode: "coding",
-    iconUrl: `${ASSETS}/gitlab/icon.png`,
     iconStyle: "plugin",
     label: {
       cn: "每周汇总当前仓库的改动和待处理风险",
@@ -549,7 +525,6 @@ export const featureSuggestedPrompts: FeatureRecommendedPrompt[] = [
   {
     id: "feature-coding-idle-external-failures",
     mode: "coding",
-    iconUrl: `${ASSETS}/github/icon.png`,
     iconStyle: "plugin",
     label: {
       cn: "帮我设置闲时任务，深查外部服务失败路径",

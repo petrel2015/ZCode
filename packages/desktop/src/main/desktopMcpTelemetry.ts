@@ -1,5 +1,5 @@
-import armsRum from "@arms/rum-electron";
 import type { ZCodeMcpTelemetryEvent } from "@zcode/shared";
+import { logger as diagnosticLogger } from "./logger.js";
 
 interface DesktopMcpTelemetryContext {
   appVersion: string;
@@ -21,7 +21,7 @@ export function reportMcpTelemetryToArms(
   if (!context || event.kind === "memory") return;
   const mapped = mapMcpTelemetryEvent(event);
   try {
-    armsRum.sendCustom({
+    diagnosticLogger.debug("[local-diagnostics]", {
       group: mapped.group,
       name: mapped.name,
       properties: stringifyProperties({

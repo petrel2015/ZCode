@@ -47,7 +47,6 @@ import {
   type DraftSuggestedPluginOperation,
   trackDraftSuggestedPluginOperation,
 } from "@/v4/ConversationDraftSuggestedPluginFlow.js";
-import { useDraftSuggestedPromptItems } from "@/v4/useDraftSuggestedPromptItems.js";
 import { useDraftSuggestedPluginActionPopover } from "@/v4/useDraftSuggestedPluginActionPopover.js";
 import { getComposerDraftRevision } from "@/v4/composer/composerDraftRevision.js";
 import { useComposerTextInsertApplied } from "@/v4/useComposerTextInsertApplied.js";
@@ -136,11 +135,7 @@ export function ConversationDraftSuggestedPromptsContainer({
   const activeOperationRef = useRef<DraftSuggestedPluginOperation | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const workspaceKey = workspaceIdentity?.trim() || workspacePath;
-  const allItems = useDraftSuggestedPromptItems({
-    clientScenesService: resolution.services.clientScenesService,
-    rpcReady: resolution.rpcReady,
-    workspaceKey,
-  });
+  const allItems: DraftSuggestedPromptItem[] = [];
   const items = useMemo(
     () =>
       (proactive ? recommendedItems : allItems).filter(
