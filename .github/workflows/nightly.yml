@@ -82,6 +82,11 @@ jobs:
           key: electron-${{ matrix.target }}-v1
           restore-keys: electron-${{ matrix.target }}-
 
+      # fpm 打 pacman 包时要用系统 bsdtar 生成 .MTREE 清单，ubuntu-latest 镜像缺这个命令。
+      - name: Install Linux packaging dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libarchive-tools
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
