@@ -50,6 +50,7 @@ import { BrowserSettingsSection } from "@/settings/BrowserSettingsSection.js";
 import { ComputerUseSection } from "@/settings/ComputerUseSection.js";
 import { ShortcutSettingsSection } from "@/settings/ShortcutSettingsSection.js";
 import { MigrationSection } from "@/settings/MigrationSection.js";
+import { AppUsagePanel } from "@/settings/usage-stats/AppUsagePanel.js";
 import { SETTINGS_FRAME_CONTENT_CLASSNAME } from "@/settings/SettingsPageParts.js";
 import {
   SettingsBreadcrumbProvider,
@@ -1342,6 +1343,9 @@ export function SettingsPage({
                               }
                             />
                           </ServiceProvider>
+                        ) : activeSection === "usage" ? (
+                          // App Usage 只读本地 session 库聚合；Coding Plan 用量已随平台账号移除。
+                          <AppUsagePanel />
                         ) : activeSection === "memory" ? (
                           <ServiceProvider services={localHostServices}>
                             {/* Memory catalog 始终使用本地 Host，避免远程 workspace 误读本机数据。 */}
