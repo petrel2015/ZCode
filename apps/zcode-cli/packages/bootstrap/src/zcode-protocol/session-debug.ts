@@ -5,7 +5,9 @@ import {
 } from "@zcode/contracts";
 import {
   SESSION_DEBUG_LIMITS,
+  accumulateSessionThroughput,
   calculateOutputTps,
+  emptySessionThroughput,
   sessionDebugParamsSchema,
   zcodeTaskNetworkDebugStatusFromPayload,
   type SessionDebugSnapshot,
@@ -26,7 +28,7 @@ const MAX_HEADER_VALUE_LENGTH = 512;
 const MAX_MESSAGE_LENGTH = 2048;
 
 function emptySnapshot(sessionId: string): SessionDebugSnapshot {
-  return { sessionId, rounds: [], networkEntries: [], cache: null };
+  return { sessionId, rounds: [], networkEntries: [], cache: null, throughput: emptySessionThroughput() };
 }
 function remember(keys: Set<string>, key: string): boolean {
   if (keys.has(key)) return false;
@@ -145,6 +147,12 @@ export function observeSessionDebug(record: SessionRecord, event: SessionEvent):
       tokensPerSecond: calculateOutputTps(outputTokens, generationDurationMs),
     },
   ].slice(-SESSION_DEBUG_LIMITS.rounds);
+  // 会话吞吐与 cache 同点累积、同一去重键；rounds 截断不影响汇总的正确性。
+  state.throughput = accumulateSessionThroughput(
+    state.throughput ?? null,
+    outputTokens,
+    generationDurationMs,
+  );
 }
 
 export function readSessionDebug(record: SessionRecord): SessionDebugSnapshot {
