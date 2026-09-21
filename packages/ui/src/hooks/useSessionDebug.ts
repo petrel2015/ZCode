@@ -3,7 +3,8 @@ import type { SessionDebugSnapshot } from "@zcode/shared";
 import { useServices } from "@/hooks/useServices.js";
 
 const REFRESH_INTERVAL_MS = 1000;
-const EMPTY_DEBUG = { rounds: [], networkEntries: [], cache: null } as const;
+// throughput 与旧 CLI 快照兼容保持 optional；空态补 undefined 让消费方无需判联合类型。
+const EMPTY_DEBUG = { rounds: [], networkEntries: [], cache: null, throughput: undefined } as const;
 
 export function useSessionDebug({
   workspacePath,
