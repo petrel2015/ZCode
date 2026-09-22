@@ -69,3 +69,5 @@ packages/desktop/.e2e-artifacts/
 packages/desktop/.e2e-cache/
 packages/desktop/.e2e-network-capture/
 .zcode-runtime/
+# dev 会话内 agent 本地运行产物（计划、会话级缓存），不入库。
+.zcode/
