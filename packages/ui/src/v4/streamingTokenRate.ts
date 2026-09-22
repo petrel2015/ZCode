@@ -21,6 +21,23 @@ export function estimateStreamedTokens(text: string): number {
   return cjkChars + (text.length - cjkChars) / 4;
 }
 
+/**
+ * 双表盘读数映射：实时估算 > 0 时带 ≈ 前缀（粗估标识）；估算器停滞/输出结束返回
+ * null 时映射为精确 0（不加 ≈）。平均是会话权威值，首轮完成前（null）显示 —。
+ */
+export function formatTokenRateReadings(
+  live: number | null,
+  avg: number | null,
+): {
+  live: string;
+  avg: string;
+} {
+  return {
+    live: live !== null && live > 0 ? `≈ ${live.toFixed(1)}` : "0",
+    avg: avg !== null ? avg.toFixed(1) : "—",
+  };
+}
+
 export interface StreamingRowSample {
   rowId: number;
   text: string;

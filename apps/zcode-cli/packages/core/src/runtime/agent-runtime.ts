@@ -105,6 +105,7 @@ import type {
   PendingModelChangeTimeline,
   PermissionDecisionResult,
   MainTurnCacheHitAggregate,
+  MainTurnThroughputAggregate,
   RuntimeTurnFileChangeMap,
   ResumeSessionOptions,
   ResumeSessionResult,
@@ -196,6 +197,11 @@ export class AgentRuntime {
     totalInputTokens: 0,
     totalCacheReadTokens: 0,
     totalCacheWriteTokens: 0,
+  };
+  private mainTurnThroughputAggregate: MainTurnThroughputAggregate = {
+    countedRounds: 0,
+    totalOutputTokens: 0,
+    totalGenerationMs: 0,
   };
   private currentTurnFileChanges: RuntimeTurnFileChangeMap = new Map();
   private lastAssistantCompletedAtMs?: number;

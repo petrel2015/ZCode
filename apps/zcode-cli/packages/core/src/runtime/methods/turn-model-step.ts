@@ -67,6 +67,7 @@ import {
   querySourceForTask,
   recordMainTurnCacheHitUsage,
   recordMainTurnModelUsage,
+  recordMainTurnThroughput,
 } from "./turn-model-step-usage.js";
 import { estimateCurrentModelInputTokens } from "./compact.js";
 import {
@@ -585,6 +586,16 @@ async function runModelBackedTurnStepImpl(
 
   const cacheHit =
     querySource === "main_turn" ? recordMainTurnCacheHitUsage(this, result.usage) : undefined;
+  // 主轮吞吐与 cacheHit 同门槛：compact/title/验证等旁路调用不计入会话平均表盘。
+  const throughput =
+    querySource === "main_turn"
+      ? recordMainTurnThroughput(this, {
+          startedAt: modelStartedAt,
+          events: state.events,
+          networkEventStartIndex,
+          usage: result.usage,
+        })
+      : undefined;
   // subagent 的文件 checkpoint 已经持久化，但旧 gate 只允许 main_turn 把
   // 汇总写入 ModelComplete，导致 child 详情无法从权威事件恢复摘要和撤销入口。
   const supportsTurnFileChanges = querySource === "main_turn" || querySource === "subagent";
@@ -606,6 +617,7 @@ async function runModelBackedTurnStepImpl(
       stopReason: result.finishReason,
       usage: result.usage,
       ...(cacheHit ? { cacheHit } : {}),
+      ...(throughput ? { throughput } : {}),
       ...(fileChanges ? { fileChanges } : {}),
       ...(querySource === "main_turn" && result.contextUsageBreakdown
         ? { contextUsageBreakdown: result.contextUsageBreakdown }

@@ -4329,8 +4329,9 @@ const zhCN: Record<string, string> = {
   "chat.history.duration.second": "秒",
   "chat.stop": "停止生成",
   "chat.stop.short": "停止",
-  "chat.streamRate.title": "≈ {rate} token/s",
-  "chat.streamRate.description": "估算值：本轮正文与思考的流式输出速率",
+  "chat.streamRate.title": "实时 {live} · 平均 {avg} token/s",
+  "chat.streamRate.description":
+    "实时：本轮正文与思考的流式估算（4s 滚动窗口）；平均：会话内各轮按生成时长加权的输出速率，不含工具执行与等待时间",
   "chat.promptEnhance.title": "增强提示词",
   "chat.promptEnhance.description": "使用当前选中的模型配置润色这条草稿。",
   "chat.promptEnhance.cancel": "取消增强",

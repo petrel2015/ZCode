@@ -4626,8 +4626,9 @@ const enUS: Record<string, string> = {
   "chat.history.duration.second": "s",
   "chat.stop": "Stop",
   "chat.stop.short": "Stop",
-  "chat.streamRate.title": "≈ {rate} token/s",
-  "chat.streamRate.description": "Estimated streaming rate of this turn's reply and reasoning",
+  "chat.streamRate.title": "Live {live} · Avg {avg} token/s",
+  "chat.streamRate.description":
+    "Live: streaming estimate of this turn's reply and reasoning (4s window). Avg: session-wide output rate weighted by generation time, excluding tool runs and waiting",
   "chat.promptEnhance.title": "Enhance prompt",
   "chat.promptEnhance.description":
     "Refine the current draft with the selected model configuration.",

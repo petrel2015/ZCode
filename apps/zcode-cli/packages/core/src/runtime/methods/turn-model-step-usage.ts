@@ -1,4 +1,11 @@
-import type { MessageId, MessageWithParts, Model, ModelUsage, TraceContext } from "../deps.js";
+import type {
+  MessageId,
+  MessageWithParts,
+  Model,
+  ModelUsage,
+  SessionEvent,
+  TraceContext,
+} from "../deps.js";
 import type { MainTurnCacheHitAggregate, RuntimeModelTextResult } from "../types.js";
 import type { AgentRuntimeInternal } from "../internal.js";
 import type { RegularTurnLoopState } from "./turn-loop-state.js";
@@ -7,7 +14,8 @@ import {
   persistedTokenUsageBaseline,
   type PersistedTokenUsageBaseline,
 } from "../../agent/message-history-usage.js";
-import { recordModelUsageFact } from "./usage-observability.js";
+import { calculateOutputTps } from "@zcode/shared";
+import { firstModelTokenAt, recordModelUsageFact } from "./usage-observability.js";
 
 interface RecordMainTurnModelUsageInput {
   assistantMessageId: MessageId;
@@ -154,6 +162,55 @@ export function recordMainTurnCacheHitUsage(
     totalInputTokens: aggregate.totalInputTokens,
     totalCacheReadTokens: aggregate.totalCacheReadTokens,
     totalCacheWriteTokens: aggregate.totalCacheWriteTokens,
+  };
+}
+
+/** 主轮吞吐汇总：随 ModelComplete 下发，投影为 v4 快照 usage.throughput 常驻显示。 */
+export interface MainTurnThroughputSummary {
+  countedRounds: number;
+  avgTokensPerSecond: number | null;
+  lastTokensPerSecond: number | null;
+}
+
+export interface RecordMainTurnThroughputInput {
+  events: readonly SessionEvent[];
+  networkEventStartIndex: number;
+  /** model step 开始时间；用于一致性防御：首 token 早于请求开始说明事件序可疑，整轮跳过。 */
+  startedAt: number;
+  usage: ModelUsage | undefined;
+}
+
+/**
+ * 主轮吞吐累积器（会话平均表盘的单一权威写入点）。
+ * 口径与 session-debug 旁路一致：生成时长 = 首 token → 请求完成，token 加权平均
+ * Σ outputTokens ÷ Σ 生成时长，不含工具执行、轮间等待与首 token 延迟。
+ * 缺首 token、缺 outputTokens 或生成时长无效的轮整轮跳过，不污染累计。
+ */
+export function recordMainTurnThroughput(
+  runtime: AgentRuntimeInternal,
+  input: RecordMainTurnThroughputInput,
+  now: number = Date.now(),
+): MainTurnThroughputSummary | undefined {
+  const firstTokenAt = firstModelTokenAt(input.events, input.networkEventStartIndex);
+  if (firstTokenAt === undefined || firstTokenAt < input.startedAt) return undefined;
+  const generationMs = now - firstTokenAt;
+  const outputTokens = input.usage?.outputTokens;
+  const roundTps = calculateOutputTps(outputTokens, generationMs);
+  if (roundTps === null || outputTokens === undefined) return undefined;
+
+  const previous = runtime.mainTurnThroughputAggregate;
+  const totalOutputTokens = previous.totalOutputTokens + outputTokens;
+  const totalGenerationMs = previous.totalGenerationMs + generationMs;
+  runtime.mainTurnThroughputAggregate = {
+    countedRounds: previous.countedRounds + 1,
+    totalOutputTokens,
+    totalGenerationMs,
+  };
+  return {
+    countedRounds: previous.countedRounds + 1,
+    avgTokensPerSecond:
+      totalGenerationMs > 0 ? (totalOutputTokens * 1000) / totalGenerationMs : null,
+    lastTokensPerSecond: roundTps,
   };
 }
 
