@@ -1,0 +1,22 @@
+packages/ui/src/ModelConfigSelect.tsx
+  h_47dbf5e7272ced 165-166,217,506-511,517
+packages/ui/src/chat-input-toolbar/RollingToolbarLabel.tsx
+  h_47dbf5e7272ced 4-7,50,57,69,72-87
+packages/ui/src/chat-input-toolbar/rollingToolbarLabelClasses.ts
+  h_47dbf5e7272ced 1-21
+packages/ui/src/v4/composer/V4ComposerToolbar.tsx
+  h_47dbf5e7272ced 647-648
+packages/ui/test/rollingToolbarLabelClasses.test.ts
+  h_47dbf5e7272ced 1-36
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "f24e17d00f9135054dad36086fa5593901318686",
+  "prompts": {},
+  "humans": {
+    "h_47dbf5e7272ced": {
+      "author": "yu2.hong <yu2.hong@ly.com>"
+    }
+  }
+}
