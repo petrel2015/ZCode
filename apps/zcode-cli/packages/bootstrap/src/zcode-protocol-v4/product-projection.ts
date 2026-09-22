@@ -673,6 +673,9 @@ export class ProductProjection {
               }
             : null,
           cumulative,
+          // usage 是整体替换对象：seed 只补 contextWindow/cumulative 水位，
+          // 已由 ModelComplete 累积的 throughput 必须透传，否则会把平均表盘抹回 null。
+          throughput: current.throughput,
         },
       };
       return;
@@ -695,6 +698,8 @@ export class ProductProjection {
             ? null
             : { ...seededContextWindow, maxTokens: seededContextWindow.maxTokens },
         cumulative,
+        // 同上：种子重建 usage 时透传既有 throughput，整体替换不得抹掉平均表盘。
+        throughput: current.throughput,
       },
     };
   }
@@ -4532,6 +4537,9 @@ export class ProductProjection {
             cacheReadTokens: cumulative.cacheReadTokens + (usage.cacheReadTokens ?? 0),
             cacheWriteTokens: cumulative.cacheWriteTokens + (usage.cacheWriteTokens ?? 0),
           },
+          // 主轮 ModelComplete 携带 core 累积的吞吐汇总；缺值轮（无首 token/无
+          // outputTokens，或旧 CLI 事件不带 throughput）保留既有值，不得抹回 null。
+          throughput: payload.throughput ?? this.snapshot.usage.throughput,
         },
       },
     });

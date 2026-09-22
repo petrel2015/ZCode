@@ -268,6 +268,16 @@ export interface MainTurnCacheHitAggregate {
   totalCacheWriteTokens: number;
 }
 
+/**
+ * 主轮吞吐累积器（进程内事实）：平均 = Σ outputTokens ÷ Σ 生成时长（首 token → 请求完成）。
+ * 生成时序没有消息级持久化字段，resume/rewind 不重建，CLI 重启后从零累积。
+ */
+export interface MainTurnThroughputAggregate {
+  countedRounds: number;
+  totalOutputTokens: number;
+  totalGenerationMs: number;
+}
+
 export type BackgroundTaskNotificationSealReason = "subagent_terminal" | "subagent_cancelled";
 
 export interface SealBackgroundTaskNotificationsInput {
