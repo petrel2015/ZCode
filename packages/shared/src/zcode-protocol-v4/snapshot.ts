@@ -202,6 +202,17 @@ export const sessionUsageStateSchema = z.object({
     cacheReadTokens: z.number(),
     cacheWriteTokens: z.number(),
   }),
+  // 会话平均吞吐（composer 常驻表盘）：Σ outputTokens ÷ Σ 生成时长，仅 main_turn 计入。
+  // additive + default null：旧快照/旧 CLI 的 usage 不带该字段时按 null 解析（UI 显示 "—"）。
+  throughput: z
+    .object({
+      countedRounds: z.number().finite().nonnegative(),
+      avgTokensPerSecond: z.number().finite().nonnegative().nullable(),
+      lastTokensPerSecond: z.number().finite().nonnegative().nullable(),
+    })
+    .strict()
+    .nullable()
+    .default(null),
 });
 export type SessionUsageState = z.infer<typeof sessionUsageStateSchema>;
 
