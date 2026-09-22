@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { cn } from "@/components/lib/utils.js";
+import {
+  ROLLING_TOOLBAR_LABEL_ROOT_CLASS_NAME,
+  rollingToolbarLabelInnerClassName,
+} from "./rollingToolbarLabelClasses.js";
 
 const LABEL_ROLL_TRANSITION = {
   duration: 0.2,
@@ -43,12 +47,14 @@ export function RollingToolbarLabel({
   prefix,
   prefixClassName,
   value,
+  truncate,
 }: {
   label: string;
   className?: string;
   prefix?: string;
   prefixClassName?: string;
   value?: string;
+  truncate?: boolean;
 }) {
   const reducedMotion = usePrefersReducedMotion();
   const content =
@@ -60,35 +66,26 @@ export function RollingToolbarLabel({
     ) : (
       label
     );
-
-  if (reducedMotion) {
-    return (
-      <span className={className} title={label}>
-        {content}
-      </span>
-    );
-  }
+  const innerClassName = rollingToolbarLabelInnerClassName(truncate);
 
   return (
-    <span
-      className={cn(
-        "relative inline-flex h-[1.3em] min-w-0 items-center overflow-hidden leading-[1.25]",
-        className,
+    <span className={cn(ROLLING_TOOLBAR_LABEL_ROOT_CLASS_NAME, className)}>
+      {reducedMotion ? (
+        <span className={innerClassName}>{content}</span>
+      ) : (
+        <AnimatePresence initial={false} mode="popLayout">
+          <motion.span
+            key={label}
+            className={innerClassName}
+            initial={{ y: "0.75em", opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: "-0.75em", opacity: 0 }}
+            transition={LABEL_ROLL_TRANSITION}
+          >
+            {content}
+          </motion.span>
+        </AnimatePresence>
       )}
-      title={label}
-    >
-      <AnimatePresence initial={false} mode="popLayout">
-        <motion.span
-          key={label}
-          className="inline-flex min-w-0 whitespace-nowrap leading-[1.25]"
-          initial={{ y: "0.75em", opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          exit={{ y: "-0.75em", opacity: 0 }}
-          transition={LABEL_ROLL_TRANSITION}
-        >
-          {content}
-        </motion.span>
-      </AnimatePresence>
     </span>
   );
 }

@@ -162,6 +162,8 @@ interface ModelConfigSelectProps {
   triggerClassName?: string;
   triggerIconClassName?: string;
   triggerLabelClassName?: string;
+  /** 单行截断交给 RollingToolbarLabel 自身处理，调用方无需用深层选择器干预内部 DOM。 */
+  triggerLabelTruncate?: boolean;
   triggerTestId?: string;
   formatTriggerLabel?: (label: string) => string;
   /** false 时把第一个 group 作为无 provider 层的扁平模型列表展示。 */
@@ -212,6 +214,7 @@ export const ModelConfigSelect = memo(function ModelConfigSelectComponent({
   triggerClassName,
   triggerIconClassName = "hidden",
   triggerLabelClassName: customTriggerLabelClassName,
+  triggerLabelTruncate,
   triggerTestId = TID_CHAT_MODEL_SELECT_TRIGGER,
   formatTriggerLabel,
   showProviderLevel,
@@ -500,12 +503,18 @@ export const ModelConfigSelect = memo(function ModelConfigSelectComponent({
           className={cn("pointer-events-none size-4 shrink-0 text-current", triggerIconClassName)}
           aria-hidden="true"
         />
-        <span className={triggerLabelClassName} title={currentTriggerTitle}>
+        {/* 有自定义 ControlHintTooltip 时不再叠加原生 title，否则 hover 会出现两个
+            位置不一致的提示（原生 title 跟随元素位置且带系统延迟）。 */}
+        <span
+          className={triggerLabelClassName}
+          title={tooltipTitle ? undefined : currentTriggerTitle}
+        >
           <RollingToolbarLabel
             label={currentTriggerLabel}
             prefix={pending ? undefined : triggerLabelPrefix}
             prefixClassName={triggerLabelPrefixClassName}
             value={pending ? undefined : triggerLabelValue}
+            truncate={triggerLabelTruncate}
           />
         </span>
         {triggerBadge}
