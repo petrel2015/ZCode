@@ -80,6 +80,8 @@ export function createInitialConversationSnapshot(
         cacheReadTokens: 0,
         cacheWriteTokens: 0,
       },
+      // 会话平均吞吐随主轮 ModelComplete 累积；初始无有效轮，UI 平均表盘显示 "—"。
+      throughput: null,
     },
     queue: { items: [], autoDrain: true },
     pendingInteractions: [],
