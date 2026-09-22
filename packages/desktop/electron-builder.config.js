@@ -671,7 +671,14 @@ export default {
     // z-code 之前只有本地未签名打包配置，CI 即使注入了证书变量，
     // electron-builder 也不会自动切到 hardened runtime / entitlement 这套发布参数。
     // 这里显式收拢到环境开关，保证本地开发不被签名配置绑死，CI 发布时再按需打开。
-    identity: shouldEnableMacSigning ? macSigningIdentity : null,
+    //
+    // 修复：无证书路径之前传 identity: null，产物完全没有 bundle 签名（仅剩链接器对
+    // 主二进制的 ad-hoc 签名）。macOS Sequoia/Tahoe 上带隔离属性的这类应用启动时直接弹
+    // 「已损坏，应该移到废纸篓」，且系统设置不提供「仍要打开」，nightly 用户无法正常安装。
+    // 改为显式 ad-hoc（"-"）：签名自洽（codesign --verify 可过），Gatekeeper 退化为可放行的
+    // 「无法验证开发者」，用户在系统设置即可放行，无需终端 xattr。详见
+    // docs/specs/desktop-packaging-signing.md。
+    identity: shouldEnableMacSigning ? macSigningIdentity : "-",
     // macOS 产物采用“build 阶段签名 + 独立公证阶段”的两段式流水线。
     // 如果这里不显式关闭 electron-builder 内置 notarize，它会在 build 阶段读取 Apple 凭据后直接尝试公证，
     // 并强制要求 APPLE_APP_SPECIFIC_PASSWORD，导致 build 还没产出 DMG 就提前失败。

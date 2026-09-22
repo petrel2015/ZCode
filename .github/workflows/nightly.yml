@@ -165,8 +165,10 @@ jobs:
           | Windows x64 | \*-win-x64.exe |
           | Linux x64 | \*.AppImage / \*.deb / \*.rpm / \*.pkg.tar.zst |
 
-          > 注意：本 nightly 为未签名构建。macOS 首次打开需在系统设置中放行，
-          > 或执行 \`xattr -dr com.apple.quarantine /Applications/ZCode.app\`。
+          > 注意：本 nightly 为 ad-hoc 签名构建（未走 Apple 公证）。macOS 首次打开若提示
+          > 「无法验证开发者」或「无法检查是否包含恶意软件」，前往 系统设置 → 隐私与安全性，
+          > 点击「仍要打开」即可，无需终端命令；也可执行
+          > \`xattr -dr com.apple.quarantine /Applications/ZCode.app\` 直接放行。
           > 完整校验值见 \`SHA256SUMS.txt\`。
           EOF
           gh release create "$NIGHTLY_TAG" artifacts/* \
