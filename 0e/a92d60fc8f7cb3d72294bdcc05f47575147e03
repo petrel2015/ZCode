@@ -1,0 +1,14 @@
+docs/specs/session-throughput.md
+  h_47dbf5e7272ced 1-103
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.4",
+  "base_commit_sha": "0ea92d60fc8f7cb3d72294bdcc05f47575147e03",
+  "prompts": {},
+  "humans": {
+    "h_47dbf5e7272ced": {
+      "author": "yu2.hong <yu2.hong@ly.com>"
+    }
+  }
+}
