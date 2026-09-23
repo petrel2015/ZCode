@@ -38,7 +38,9 @@ const desktop = JSON.parse(await readFile(join(root, "packages/desktop/package.j
 for (const dependency of ["electron-updater", "@arms/rum-electron"])
   assert.equal(desktop.dependencies[dependency], undefined);
 const build = await readFile(join(root, "packages/desktop/tsup.config.ts"), "utf8");
-assert.equal(/src\/scheduler\/|preload\/codingPlanWebview/.test(build), false);
+// 定时任务（cron scheduler）已随 standalone 恢复本地调度，scheduler 构建入口合法；
+// codingPlanWebview 仍属平台计费面，继续禁止。
+assert.equal(/preload\/codingPlanWebview/.test(build), false);
 const templates = await readFile(join(root, "config/provider/zcode-builtin.json"), "utf8");
 assert.equal(/zhipu-account|account:/.test(templates), false);
 console.log(

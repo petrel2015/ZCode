@@ -42,6 +42,7 @@ import {
 } from "@/lib/settingsNavigation.js";
 import { ModelProviderSection } from "@/settings/ModelProviderSection.js";
 import { SubagentsSection } from "@/settings/SubagentsSection.js";
+import { AutomationsSection } from "@/settings/AutomationsSection.js";
 import { PluginsSection } from "@/settings/PluginsSection.js";
 import { HooksSection } from "@/settings/HooksSection.js";
 import { WorkspaceFileSearchSection } from "@/settings/WorkspaceFileSearchSection.js";
@@ -1410,6 +1411,11 @@ export function SettingsPage({
                         ) : activeSection === "subagents" ? (
                           <SubagentsSection
                             onManageModels={handleOpenModelProviderSettings}
+                            workspacePath={activeWorkspacePath}
+                            workspaceIdentity={activeWorkspaceIdentity}
+                          />
+                        ) : activeSection === "automations" ? (
+                          <AutomationsSection
                             workspacePath={activeWorkspacePath}
                             workspaceIdentity={activeWorkspaceIdentity}
                           />

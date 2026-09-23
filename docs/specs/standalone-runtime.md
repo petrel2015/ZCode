@@ -1,6 +1,6 @@
 # Standalone runtime
 
-Status: implemented; desktop acceptance completed with the validation limits below. Approved scope: remove ZCode platform services while retaining local coding and user-configured model providers.
+Status: implemented; desktop acceptance completed with the validation limits below. Approved scope: remove ZCode platform services while retaining local coding and user-configured model providers. Local scheduled tasks (Automations/cron) were later restored — see "Scheduled-task restoration" below; off-peak execution remains removed.
 
 ## Product contract
 
@@ -8,7 +8,18 @@ Status: implemented; desktop acceptance completed with the validation limits bel
 - No automatic or feature-triggered access to `zcode.z.ai` or `cdn-zcode.z.ai`, including startup with historical settings, cached providers and scheduled tasks. Domain rejection must happen before DNS/network dispatch; redirects must not bypass it.
 - Models use the configured protocol, base URL, API key and model ID. No official gateway rewrite, entitlement lookup or fallback to a platform model. Missing/invalid credentials produce configuration errors.
 - Built-in model templates and required plugin assets are local. Personal providers and local plugins remain available; third-party MCP authentication remains independent.
-- Remove cron and off-peak task management, background processes and automatic dispatch. Ordinary conversation admission, tool scheduling, workflow execution, owner/lease routing, cancellation and recovery remain intact.
+- Local scheduled tasks (Automations/cron) run entirely on-device: claim/dispatch state machine in the cron scheduler utility process, execution through the window Host's task service, persistence in tasks-index.sqlite. Off-peak (idle-time) task management stays removed — it depends on platform billing and server dispatch. Ordinary conversation admission, tool scheduling, workflow execution, owner/lease routing, cancellation and recovery remain intact.
+
+## Scheduled-task restoration
+
+The initial standalone conversion removed cron together with off-peak. Cron has been restored as a pure local capability:
+
+- CLI tools `CronCreate/CronList/CronUpdate/CronDelete` register when the automation port is present; the port is already assembled by the protocol entrypoint.
+- `AutomationService`/`AutomationRepo`/croner schedule computation return under `@zcode/services/node`; RPC handlers `automationCreate/List/CheckTaskBinding/Update/Delete` return in `zcodeAgentService`.
+- Desktop main spawns the `src/scheduler` utility process after local database startup; dispatch flows `scheduler → main → HostMessageTypes.CronRun → host dispatchCronRun → createTask/resumeTask + sendPrompt`; terminal outcomes are written back by `cronRunLifecycle`.
+- The Automations settings section and the "automations" main view return, with the in-page「自动化 / 工作流」tab switch; SavedWorkflows render as the workflow tab.
+- Not restored with cron: off-peak UI/service/scheduler branches, coding-plan funnel surfaces, remote client-scenes template catalog (creation stays manual), and `useStartPlanRecommendation` in the automation editor.
+- `scripts/check-standalone-surface.mjs` now allows the `src/scheduler/` build entry and still rejects `preload/codingPlanWebview`.
 
 ## Ownership and boundaries
 
@@ -51,7 +62,7 @@ Legacy account credentials and retired task records are not read for runtime adm
 - Fresh and historical profiles start without login, token refresh or platform requests.
 - API-key provider configuration persists across restart; missing key and rejected key do not open login or use another endpoint.
 - Mock model verifies configured destination, streaming, tool call, cancellation and continuation. Paid live GLM calls require a separate bounded budget.
-- Historical cron/off-peak records never execute. Ordinary manual task and workflow execution remain available.
+- Historical local cron records execute again after restoration (same tasks-index.sqlite tables); historical off-peak records never execute. Ordinary manual task and workflow execution remain available.
 - Desktop and Web settings expose no retired feature entrypoints; keyboard/mobile/theme behavior remains usable.
 - Static scan explains all remaining retired-domain mentions (tests, historical migration recognition, deny policy, this spec).
 - Runtime network evidence covers startup, idle, settings, workspace switch, mock conversation and restart; zero DNS/HTTP/WebSocket dispatches to retired domains. A denied attempt is a defect to trace, not proof that feature cleanup is complete.

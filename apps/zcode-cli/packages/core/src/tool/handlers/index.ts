@@ -38,6 +38,12 @@ import { isSubagentDispatchToolName } from "../compat.js";
 import { skillToolEntry } from "./skill.js";
 import { todoReadToolEntry, todoWriteToolEntry } from "./todo.js";
 import {
+  cronCreateToolEntry,
+  cronDeleteToolEntry,
+  cronListToolEntry,
+  cronUpdateToolEntry,
+} from "./cron.js";
+import {
   createEnterPlanModeToolEntry,
   enterPlanModeToolEntry,
   exitPlanModeToolEntry,
@@ -78,6 +84,10 @@ export const builtInTools: ToolEntry[] = [
   webSearchToolEntry,
   todoReadToolEntry,
   todoWriteToolEntry,
+  cronCreateToolEntry,
+  cronListToolEntry,
+  cronUpdateToolEntry,
+  cronDeleteToolEntry,
   enterPlanModeToolEntry,
   exitPlanModeToolEntry,
   askUserQuestionToolEntry,
@@ -223,6 +233,15 @@ export function registerBuiltInTools(
       continue;
     }
     if (entry.metadata.name === "Workflow" && options.includeWorkflow !== true) {
+      continue;
+    }
+    if (
+      (entry.metadata.name === "CronCreate" ||
+        entry.metadata.name === "CronList" ||
+        entry.metadata.name === "CronUpdate" ||
+        entry.metadata.name === "CronDelete") &&
+      options.includeAutomation !== true
+    ) {
       continue;
     }
     if (

@@ -3,6 +3,7 @@ import type { BackgroundBashOutputResult, SessionDebugSnapshot } from "@zcode/sh
 import type { Event, IDisposable } from "@zcode/rpc";
 import { ServiceChannels } from "@zcode/shared";
 import type { AppUsageRange, AppUsageSnapshot, ZCodeTaskTokenUsageResult } from "@zcode/shared";
+import type { ZCodeAutomation, ZCodeAutomationRun } from "@zcode/shared";
 import type {
   ZCodeStorageStartupState,
   ZCodeDeliveryKind,
@@ -107,8 +108,11 @@ export * from "./zcodeAgentPluginParams.js";
 export * from "./zcodeAgentWorkflowParams.js";
 import type {
   ZCodeAgentAddPluginMarketplaceParams,
+  ZCodeAgentAutomationIdParams,
   ZCodeAgentCancelPluginOperationParams,
   ZCodeAgentConfigurePluginParams,
+  ZCodeAgentCreateAutomationParams,
+  ZCodeAgentDeleteAutomationRunParams,
   ZCodeAgentResetPluginConfigParams,
   ZCodeAgentDescribePluginParams,
   ZCodeAgentInstallPluginParams,
@@ -119,8 +123,10 @@ import type {
   ZCodeAgentResolveSuggestedPluginReferenceParams,
   ZCodeAgentRemovePluginMarketplaceParams,
   ZCodeAgentRestoreBuiltinPluginParams,
+  ZCodeAgentSetAutomationEnabledParams,
   ZCodeAgentSetPluginEnabledParams,
   ZCodeAgentUninstallPluginParams,
+  ZCodeAgentUpdateAutomationParams,
   ZCodeAgentUpdatePluginMarketplaceParams,
   ZCodeAgentUpdatePluginParams,
   ZCodeAgentValidatePluginParams,
@@ -668,6 +674,16 @@ export interface IZCodeAgentService {
   describePlugin(params: ZCodeAgentDescribePluginParams): Promise<ZCodePluginsDescribeResult>;
   setPluginEnabled(params: ZCodeAgentSetPluginEnabledParams): Promise<ZCodePluginsSetEnabledResult>;
   // ---- 定时任务(automation)管理 ----
+  listAutomations(params: ZCodeAgentWorkspaceTarget): Promise<ZCodeAutomation[]>;
+  listAllAutomations(): Promise<ZCodeAutomation[]>;
+  createAutomation(params: ZCodeAgentCreateAutomationParams): Promise<ZCodeAutomation>;
+  updateAutomation(params: ZCodeAgentUpdateAutomationParams): Promise<ZCodeAutomation | null>;
+  deleteAutomation(params: ZCodeAgentAutomationIdParams): Promise<void>;
+  setAutomationEnabled(params: ZCodeAgentSetAutomationEnabledParams): Promise<void>;
+  restartAutomation(params: ZCodeAgentAutomationIdParams): Promise<void>;
+  runAutomationNow(params: ZCodeAgentAutomationIdParams): Promise<ZCodeAgentRunAutomationNowResult>;
+  listAutomationRuns(params: ZCodeAgentAutomationIdParams): Promise<ZCodeAutomationRun[]>;
+  deleteAutomationRun(params: ZCodeAgentDeleteAutomationRunParams): Promise<void>;
   generateWorkspaceText(
     params: ZCodeAgentGenerateWorkspaceTextParams,
   ): Promise<ZCodeWorkspaceGenerateTextResult>;

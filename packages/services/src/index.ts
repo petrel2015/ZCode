@@ -123,6 +123,8 @@ export type {
   ZCodeTaskGroupColor,
 } from "./session/zcodeTaskService.js";
 export type { ZCodeTaskListItem } from "./session/zcodeTaskListTypes.js";
+// 定时任务 cron 表达式校验（browser-safe，供 UI 编辑器复用）。
+export { isValidCronExpr } from "./session/automationCronValidation.js";
 
 export { IWindowControllerService } from "./window-controller/windowController.js";
 export type {
