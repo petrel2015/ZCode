@@ -10,18 +10,13 @@ import {
 // 从 desktopLinuxDeepLinkRegistration 拆出的 AppImage 用户级图标安装逻辑：
 // 图标集成是可选的桌面增强，与 deep link 协议注册分属不同关注点，独立成模块便于各自演进。
 
-const LINUX_APP_ICON_NAME = "zcode";
+// 图标名与 desktop entry 的 Icon= 保持一致；standalone 传 zcode-standalone，
+// 用户级 hicolor 图标与正式版安装互不覆盖。
+const DEFAULT_LINUX_APP_ICON_NAME = "zcode";
 const LINUX_APP_ICON_SIZE = "512x512";
 
-function resolveLinuxUserIconFilePath(dataDir: string): string {
-  return join(
-    dataDir,
-    "icons",
-    "hicolor",
-    LINUX_APP_ICON_SIZE,
-    "apps",
-    `${LINUX_APP_ICON_NAME}.png`,
-  );
+function resolveLinuxUserIconFilePath(dataDir: string, iconName: string): string {
+  return join(dataDir, "icons", "hicolor", LINUX_APP_ICON_SIZE, "apps", `${iconName}.png`);
 }
 
 function copyFileIfChanged(sourcePath: string, targetPath: string): boolean {
@@ -43,10 +38,11 @@ function shouldInstallAppImageDesktopIcon(params: {
 function installLinuxAppImageDesktopIcon(params: {
   dataDir: string;
   iconSourcePath: string;
+  iconName: string;
   logger: LinuxDeepLinkRegistrationLogger;
   runCommand?: LinuxDesktopCommandRunner;
 }): { iconFilePath: string; installed: boolean; changed: boolean } {
-  const iconFilePath = resolveLinuxUserIconFilePath(params.dataDir);
+  const iconFilePath = resolveLinuxUserIconFilePath(params.dataDir, params.iconName);
   if (!existsSync(params.iconSourcePath)) {
     params.logger.warn("[deep-link] Linux AppImage 图标源文件不存在，跳过用户级图标安装", {
       iconSourcePath: params.iconSourcePath,
@@ -57,8 +53,8 @@ function installLinuxAppImageDesktopIcon(params: {
 
   mkdirSync(dirname(iconFilePath), { recursive: true });
   const changed = copyFileIfChanged(params.iconSourcePath, iconFilePath);
-  // AppImage 直跑不会像 deb 安装包一样把 Icon=zcode 写入 hicolor 图标主题。
-  // 这里在用户级 hicolor 目录补齐同名图标，让任务栏/Dock 有机会按 desktop entry 命中真实图标。
+  // AppImage 直跑不会像 deb 安装包一样把系统图标写入 hicolor 图标主题。
+  // 这里在用户级 hicolor 目录补齐与 desktop entry Icon= 同名的图标，让任务栏/Dock 有机会命中真实图标。
   if (!changed) {
     return { iconFilePath, installed: true, changed };
   }
@@ -94,6 +90,8 @@ export function installLinuxAppImageDesktopIconBestEffort(params: {
   dataDir: string;
   env?: { APPIMAGE?: string };
   iconSourcePath?: string;
+  /** hicolor 图标名；缺省 zcode，standalone 传 zcode-standalone。 */
+  iconName?: string;
   logger: LinuxDeepLinkRegistrationLogger;
   runCommand?: LinuxDesktopCommandRunner;
 }): { iconFilePath: string; installed: boolean; changed: boolean } | null {
@@ -111,6 +109,7 @@ export function installLinuxAppImageDesktopIconBestEffort(params: {
     return installLinuxAppImageDesktopIcon({
       dataDir: params.dataDir,
       iconSourcePath: params.iconSourcePath,
+      iconName: params.iconName ?? DEFAULT_LINUX_APP_ICON_NAME,
       logger: params.logger,
       runCommand: params.runCommand,
     });

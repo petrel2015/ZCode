@@ -1,5 +1,9 @@
-const DEEP_LINK_SCHEME = "zcode";
-const DEEP_LINK_RE = /\bzcode:(?:\/\/|\/)?[^\s"'<>]+/i;
+import { ZCODE_DEEP_LINK_SCHEME } from "@zcode/shared";
+
+// scheme 与身份绑定（standalone 用 zcode-standalone，避免与正式版互抢协议归属），
+// 编译期由 shared 的 flavor define 派生，本模块不重复持有事实。
+const DEEP_LINK_SCHEME = ZCODE_DEEP_LINK_SCHEME;
+const DEEP_LINK_RE = new RegExp(`\\b${DEEP_LINK_SCHEME}:(?:\\/\\/|\\/)?[^\\s"'<>]+`, "i");
 const WORKSPACE_OPEN_HOST = "workspace";
 const DEEP_LINK_ADDITIONAL_DATA_KEY = "deepLinkUrl";
 const OPEN_WORKSPACE_ADDITIONAL_DATA_KEY = "openWorkspacePath";

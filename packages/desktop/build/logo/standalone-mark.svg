@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#242424"/>
+      <stop offset="0.5" stop-color="#191919"/>
+      <stop offset="1" stop-color="#0d0d0d"/>
+    </linearGradient>
+    <linearGradient id="glyph" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#e8e8e8"/>
+    </linearGradient>
+    <linearGradient id="slashRed" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#e53935"/>
+      <stop offset="1" stop-color="#b71c1c"/>
+    </linearGradient>
+    <clipPath id="tile"><rect x="0" y="0" width="1024" height="1024" rx="230"/></clipPath>
+    <clipPath id="glyphClip"><path d="M0,0 L560,0 L560,120 L150,440 L560,440 L560,560 L0,560 L0,440 L410,120 L0,120 Z"/></clipPath>
+    <mask id="bgOnly">
+      <rect x="0" y="0" width="1024" height="1024" fill="white"/>
+      <g transform="translate(512,512) skewX(-12) translate(-280,-280)">
+        <path d="M0,0 L560,0 L560,120 L150,440 L560,440 L560,560 L0,560 L0,440 L410,120 L0,120 Z" fill="black"/>
+      </g>
+      <g transform="translate(512,500) rotate(-6)">
+        <path d="M-350.0,-29.0 L260.0,-29.0 L350.0,0.0 L-260.0,29.0 L-298.0,9.0 L-254.0,2.0 L-324.0,-2.0 L-344.0,7.0 L-334.0,0.0 Z" fill="black" stroke="black" stroke-width="60"/>
+      </g>
+    </mask>
+  </defs>
+
+  <rect x="0" y="0" width="1024" height="1024" rx="230" fill="url(#bg)"/>
+
+  <g clip-path="url(#tile)">
+    
+    <g stroke="#ffffff" stroke-width="4" opacity="0.10" fill="none">
+      <path d="M132,190 L348,116"/>
+      <path d="M700,884 L916,800"/>
+    </g>
+    <g stroke="#ffffff" stroke-width="3" opacity="0.14" fill="none">
+      <path d="M156,664 L104,756"/>
+    </g>
+
+    <!-- Z 字：居中 + 斜体 -->
+    <g transform="translate(512,512) skewX(-12) translate(-280,-280)">
+      <path d="M0,0 L560,0 L560,120 L150,440 L560,440 L560,560 L0,560 L0,440 L410,120 L0,120 Z" fill="url(#glyph)"/>
+      <!-- 两道与笔画平行的切缝（解构感，复刻原图标）：切断上杠/对角、对角/下杠的接缝 -->
+      <rect x="70.0" y="121.0" width="660" height="18" fill="#141414" clip-path="url(#glyphClip)" transform="rotate(-37.97 400 130)"/>
+      <rect x="-170.0" y="421.0" width="660" height="18" fill="#141414" clip-path="url(#glyphClip)" transform="rotate(-37.97 160 430)"/>
+      <g clip-path="url(#glyphClip)">
+    <path d="M476,16 L550,30 L484,52 Z" fill="#101010"/>
+    <path d="M14,518 L72,502 L26,546 Z" fill="#101010"/>
+    <path d="M118,318 L176,300 L128,352 Z" fill="#101010"/></g>
+    </g>
+
+    <!-- 叛忍横道 -->
+    <g transform="translate(512,500) rotate(-6)">
+      <path d="M-350.0,-29.0 L260.0,-29.0 L350.0,0.0 L-260.0,29.0 L-298.0,9.0 L-254.0,2.0 L-324.0,-2.0 L-344.0,7.0 L-334.0,0.0 Z" fill="#ffffff" stroke="#0f0f0f" stroke-width="14" stroke-linejoin="miter"/>
+    </g>
+    
+    <g mask="url(#bgOnly)">
+      <g transform="translate(512,500) rotate(-6)" stroke="#f5f5f5" stroke-width="5" fill="none" opacity="0.7" stroke-linecap="square">
+        <path d="M-374,-34 L-428,-62 L-462,-58"/>
+        <path d="M366,-22 L416,-46 L454,-44"/>
+        <path d="M-290,44 L-320,72"/>
+      </g>
+      <g fill="#f5f5f5" opacity="0.8">
+        <path d="M188,428 l30,-12 -8,26 Z"/>
+        <path d="M812,604 l34,10 -20,18 Z"/>
+        <path d="M836,414 l18,-8 -2,16 Z"/>
+      </g>
+    </g>
+
+    
+    <g mask="url(#bgOnly)">
+      <path d="M768,36.800000000000004 L863,4.6000000000000005 L922.8,133.39999999999998 L826.2,179.4 L754,151.8 Z"
+            fill="#2f2f2f" opacity="0.85"/>
+      <path d="M955,46 l38,-14 -10,30 Z" fill="#3d3d3d" opacity="0.7"/>
+      <path d="M730,78.2 l-26,-24 30,-4 Z" fill="#383838" opacity="0.6"/>
+    </g>
+  </g>
+</svg>

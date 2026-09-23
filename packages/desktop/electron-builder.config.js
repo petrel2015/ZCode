@@ -455,6 +455,10 @@ export default {
   extraMetadata: {
     version: buildMetadata.appVersion,
     zcodeProductFlavor: desktopProductIdentity.flavor,
+    // 运行时（main 进程打包产物）通过 package.json 感知构建身份的只读通道；
+    // scheme 与身份绑定，standalone 用 zcode-standalone 避免与正式版互抢协议归属。
+    zcodeDeepLinkScheme: desktopProductIdentity.deepLinkScheme,
+    zcodeLinuxExecutableName: desktopProductIdentity.linuxExecutableName,
     author: {
       name: "ZCode",
       email: "dev@zcode.z.ai",
@@ -650,9 +654,10 @@ export default {
   protocols: [
     {
       // 协议处理器的展示名之前使用小写 scheme，打包产物里的协议描述无法体现产品名。
-      // 展示名跟随安装包身份；scheme 仍保持 zcode，因此两个应用中最后注册者会成为默认 handler。
+      // 展示名跟随安装包身份；scheme 与身份绑定，standalone 用独立 scheme，
+      // 与正式/Preview 安装并排时互不抢占 zcode:// 的协议归属。
       name: desktopProductIdentity.productName,
-      schemes: ["zcode"],
+      schemes: [desktopProductIdentity.deepLinkScheme],
     },
   ],
   mac: {

@@ -8,10 +8,34 @@ import {
   type LinuxDeepLinkRegistrationLogger,
 } from "./desktopLinuxXdg.js";
 
-const LINUX_DEEP_LINK_DESKTOP_FILE = "zcode.desktop";
-const LINUX_DEEP_LINK_MIME_TYPE = "x-scheme-handler/zcode";
-// 归属标记：用于识别用户级 zcode.desktop 是否由本应用写入（历史所有版本都带这行 Comment）。
-const LINUX_DESKTOP_ENTRY_OWNERSHIP_MARKER = "Comment=ZCode Desktop App";
+// 正式/Preview 身份的用户级注册条目；standalone 通过 options 传入自己的条目 id 与 scheme，
+// 两个产品的用户级 desktop entry 互不同名，XDG 解析互不遮蔽。
+const DEFAULT_LINUX_DESKTOP_ENTRY_ID = "zcode";
+const DEFAULT_LINUX_DEEP_LINK_SCHEME = "zcode";
+// 归属标记：用于识别用户级条目是否由本应用写入（历史所有版本都带这行 Comment，
+// Preview 也复用同一 marker，不能从 productName 派生，否则旧条目会被判为非本应用写入）。
+// standalone 通过 ownershipMarker 传入独立标记，清理逻辑只认自己写入的条目。
+const DEFAULT_LINUX_DESKTOP_ENTRY_OWNERSHIP_MARKER = "Comment=ZCode Desktop App";
+
+interface LinuxDeepLinkIdentity {
+  desktopFileName: string;
+  mimeType: string;
+  ownershipMarker: string;
+}
+
+function resolveLinuxDeepLinkIdentity(params: {
+  desktopEntryId?: string;
+  scheme?: string;
+  ownershipMarker?: string;
+}): LinuxDeepLinkIdentity {
+  const desktopEntryId = params.desktopEntryId ?? DEFAULT_LINUX_DESKTOP_ENTRY_ID;
+  const scheme = params.scheme ?? DEFAULT_LINUX_DEEP_LINK_SCHEME;
+  return {
+    desktopFileName: `${desktopEntryId}.desktop`,
+    mimeType: `x-scheme-handler/${scheme}`,
+    ownershipMarker: params.ownershipMarker ?? DEFAULT_LINUX_DESKTOP_ENTRY_OWNERSHIP_MARKER,
+  };
+}
 
 type LinuxDesktopEnv = {
   APPIMAGE?: string;
@@ -29,6 +53,12 @@ interface RegisterLinuxDeepLinkProtocolOptions {
   logger: LinuxDeepLinkRegistrationLogger;
   runCommand?: LinuxDesktopCommandRunner;
   systemApplicationDirs?: string[];
+  /** 用户级条目 id（文件名 `<id>.desktop`）与安装的 hicolor 图标名；默认 zcode。 */
+  desktopEntryId?: string;
+  /** deep-link scheme，默认 zcode；standalone 传 zcode-standalone。 */
+  scheme?: string;
+  /** 条目归属标记行；默认历史值，standalone 传自己的标记以便只清理自己的条目。 */
+  ownershipMarker?: string;
 }
 
 interface LinuxDeepLinkCommand {
@@ -108,9 +138,11 @@ function createLinuxDeepLinkDesktopEntry(params: {
   args?: string[];
   productName?: string;
   iconName?: string;
+  mimeType: string;
+  ownershipMarker: string;
 }): string {
   const productName = params.productName ?? "ZCode";
-  const iconName = params.iconName ?? "zcode";
+  const iconName = params.iconName ?? DEFAULT_LINUX_DESKTOP_ENTRY_ID;
   const command = {
     executablePath: params.executablePath,
     args: params.args ?? [],
@@ -118,13 +150,13 @@ function createLinuxDeepLinkDesktopEntry(params: {
   return [
     "[Desktop Entry]",
     `Name=${productName}`,
-    LINUX_DESKTOP_ENTRY_OWNERSHIP_MARKER,
+    params.ownershipMarker,
     `Exec=${formatDesktopExec(command)}`,
     "Terminal=false",
     "Type=Application",
     `Icon=${iconName}`,
     "Categories=Development;",
-    `MimeType=${LINUX_DEEP_LINK_MIME_TYPE};`,
+    `MimeType=${params.mimeType};`,
     `StartupWMClass=${productName}`,
     "",
   ].join("\n");
@@ -151,9 +183,12 @@ function resolveLinuxSystemApplicationDirs(env?: { XDG_DATA_DIRS?: string }): st
   return dataDirs.map((dir) => join(dir, "applications"));
 }
 
-function findSystemLevelDesktopEntryPath(systemApplicationDirs: string[]): string | undefined {
+function findSystemLevelDesktopEntryPath(
+  systemApplicationDirs: string[],
+  desktopFileName: string,
+): string | undefined {
   for (const dir of systemApplicationDirs) {
-    const candidate = join(dir, LINUX_DEEP_LINK_DESKTOP_FILE);
+    const candidate = join(dir, desktopFileName);
     // 边界：目录或损坏的路径不应被当成有效系统级条目，否则纯 AppImage 用户
     // 的用户级注册会被病态路径误抑制。只有普通文件才参与遮蔽判断。
     try {
@@ -167,14 +202,12 @@ function findSystemLevelDesktopEntryPath(systemApplicationDirs: string[]): strin
   return undefined;
 }
 
-function isOwnedDesktopEntry(path: string): boolean {
+function isOwnedDesktopEntry(path: string, ownershipMarker: string): boolean {
   try {
     const content = readFileSync(path, "utf8");
     // 去掉 \r 与行首尾空白，兼容 CRLF 行尾或手工编辑器引入的额外空白，
     // 避免可清理的遗留条目被误判为用户自定义条目而永久残留。
-    return content
-      .split("\n")
-      .some((line) => line.replaceAll("\r", "").trim() === LINUX_DESKTOP_ENTRY_OWNERSHIP_MARKER);
+    return content.split("\n").some((line) => line.replaceAll("\r", "").trim() === ownershipMarker);
   } catch {
     return false;
   }
@@ -182,12 +215,13 @@ function isOwnedDesktopEntry(path: string): boolean {
 
 function removeOwnedUserDesktopEntry(
   desktopFilePath: string,
+  ownershipMarker: string,
   logger: LinuxDeepLinkRegistrationLogger,
 ): void {
   if (!existsSync(desktopFilePath)) {
     return;
   }
-  if (!isOwnedDesktopEntry(desktopFilePath)) {
+  if (!isOwnedDesktopEntry(desktopFilePath, ownershipMarker)) {
     logger.warn("[deep-link] Linux 用户级 zcode.desktop 非本应用写入，保留不清理", {
       desktopFilePath,
     });
@@ -203,8 +237,8 @@ function removeOwnedUserDesktopEntry(
   }
 }
 
-function resolveLinuxDeepLinkDesktopFilePath(dataDir: string): string {
-  return join(dataDir, "applications", LINUX_DEEP_LINK_DESKTOP_FILE);
+function resolveLinuxDeepLinkDesktopFilePath(dataDir: string, desktopFileName: string): string {
+  return join(dataDir, "applications", desktopFileName);
 }
 
 function writeFileIfChanged(path: string, content: string): boolean {
@@ -223,26 +257,36 @@ export function registerLinuxDeepLinkProtocol(options: RegisterLinuxDeepLinkProt
     executablePath: options.executablePath,
     argv: options.argv,
   });
+  // 身份（条目文件名/scheme/marker）由调用方按构建身份注入；默认保持正式版行为不变。
+  const identity = resolveLinuxDeepLinkIdentity({
+    desktopEntryId: options.desktopEntryId,
+    scheme: options.scheme,
+    ownershipMarker: options.ownershipMarker,
+  });
   const dataDir = resolveLinuxUserDataDir({ env: options.env, homeDir: options.homeDir });
-  const desktopFilePath = resolveLinuxDeepLinkDesktopFilePath(dataDir);
+  const desktopFilePath = resolveLinuxDeepLinkDesktopFilePath(dataDir, identity.desktopFileName);
   const applicationsDir = dirname(desktopFilePath);
   const desktopEntry = createLinuxDeepLinkDesktopEntry({
     ...command,
     productName: options.productName,
+    iconName: options.desktopEntryId,
+    mimeType: identity.mimeType,
+    ownershipMarker: identity.ownershipMarker,
   });
   let protocolRegistered = false;
   const runCommand = options.runCommand ?? runXdgCommand;
 
-  // 用户级 zcode.desktop 在 XDG
+  // 用户级 desktop entry 在 XDG
   // 解析中永远优先于系统级同名条目。rpm/deb 安装后，旧 AppImage 写入的用户级条目会把
-  // /usr/share/applications/zcode.desktop 持续遮蔽，快捷方式和 zcode:// deep link 一直
+  // /usr/share/applications/ 下的系统级条目持续遮蔽，快捷方式和 deep link 一直
   // 指向旧 AppImage（文件还在时）或直接失效（文件被删后），只有手动跑一次新版才会被覆盖。
   // 现在只要检测到系统级同 ID 条目：
   // - 系统安装形态（rpm/deb）运行时：清掉本应用写入的遗留用户级条目，且不再写用户级；
   // - AppImage 运行时：不再写用户级条目和用户级图标，避免旧 AppImage 再度遮蔽系统安装。
-  // 用户手写的自定义 zcode.desktop（无归属标记）不受影响，保留不清理。
+  // 用户手写的自定义条目（无归属标记）不受影响，保留不清理。
   const systemDesktopEntryPath = findSystemLevelDesktopEntryPath(
     options.systemApplicationDirs ?? resolveLinuxSystemApplicationDirs(options.env),
+    identity.desktopFileName,
   );
 
   try {
@@ -252,7 +296,7 @@ export function registerLinuxDeepLinkProtocol(options: RegisterLinuxDeepLinkProt
         systemDesktopEntryPath,
         desktopFilePath,
       });
-      removeOwnedUserDesktopEntry(desktopFilePath, options.logger);
+      removeOwnedUserDesktopEntry(desktopFilePath, identity.ownershipMarker, options.logger);
     } else {
       changed = writeFileIfChanged(desktopFilePath, desktopEntry);
     }
@@ -262,8 +306,8 @@ export function registerLinuxDeepLinkProtocol(options: RegisterLinuxDeepLinkProt
     const updateResult = runCommand("update-desktop-database", [applicationsDir]);
     const defaultResult = runCommand("xdg-mime", [
       "default",
-      LINUX_DEEP_LINK_DESKTOP_FILE,
-      LINUX_DEEP_LINK_MIME_TYPE,
+      identity.desktopFileName,
+      identity.mimeType,
     ]);
 
     if (defaultResult.status === 0) {
@@ -321,6 +365,7 @@ export function registerLinuxDeepLinkProtocol(options: RegisterLinuxDeepLinkProt
         dataDir,
         env: options.env,
         iconSourcePath: options.iconSourcePath,
+        iconName: options.desktopEntryId,
         logger: options.logger,
         runCommand,
       });
