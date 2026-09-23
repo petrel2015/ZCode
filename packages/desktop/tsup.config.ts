@@ -125,7 +125,7 @@ const desktopNodeRuntimeExternals = [
   "yauzl",
 ];
 
-function createDevReadyMarkerHook(target: "main" | "host" | "preload"): string {
+function createDevReadyMarkerHook(target: "main" | "host" | "preload" | "scheduler"): string {
   // CLI 级 --onSuccess 在多 config watch 模式下会被每个子构建分别触发。
   // 之前 preload 先成功时就提前写入 ready 标记，Electron 仍会在 main/host 未完成时启动。
   // 这里改成每个 config 自己在成功后写独立 marker，让 dev 启动脚本能精确等待全部构建完成。
@@ -230,6 +230,34 @@ export default defineConfig([
       options.chunkNames = "host/chunk-[hash]";
     },
     onSuccess: createDevReadyMarkerHook("host"),
+    ...desktopTsupBundleSecurityOptions,
+  },
+  {
+    name: "scheduler",
+    entry: { "scheduler/index": "src/scheduler/index.ts" },
+    outDir: "out",
+    format: "esm",
+    platform: "node",
+    target: "node22",
+    // 与 host 同构：常驻 cron scheduler 进程复用 @zcode/services（tasks-index + cron），
+    // 同样保留 undici 等为外部依赖，避免 Electron ESM runtime 的 dynamic require 崩溃。
+    external: desktopNodeRuntimeExternals,
+    noExternal: [
+      "@zcode/server",
+      "@zcode/shared",
+      "@zcode/rpc",
+      "@zcode/services",
+      "@zcode/client",
+      "@zcode/provider",
+      "@zcode/provider-node",
+      "@zcode/zcode-cua",
+    ],
+    define: createSharedDefines(),
+    esbuildOptions(options) {
+      applyDesktopTsupEsbuildSecurityOptions(options);
+      options.chunkNames = "scheduler/chunk-[hash]";
+    },
+    onSuccess: createDevReadyMarkerHook("scheduler"),
     ...desktopTsupBundleSecurityOptions,
   },
 ]);
