@@ -4,7 +4,10 @@ import "./desktopEarlyDataBaseDirBootstrap.js";
 import "./desktopEarlyChromiumHardwareAccelerationBootstrap.js";
 import { powerSaveBlocker } from "electron";
 import { crashCapturePaths } from "./appCrashCaptureBootstrap.js";
-import { configureDatabaseStartupQuit } from "./databaseStartupRelay.js";
+import {
+  configureDatabaseStartupQuit,
+  onLocalDatabaseStartupReady,
+} from "./databaseStartupRelay.js";
 import { ensureDesktopDeviceMidSync } from "./desktopDeviceMid.js";
 import { buildBrowserViewCloseTabNotification } from "./browserView/browserCloseTabNotification.js";
 import { BrowserGuestManager } from "./browserView/browserGuestManager.js";
@@ -117,6 +120,7 @@ import {
   listDisposingHostProcesses,
   spawnHostProcess,
 } from "./desktopHostProcess.js";
+import { spawnCronScheduler, type CronSchedulerHandle } from "./desktopCronScheduler.js";
 import {
   clearOAuthRoutesForWindow,
   handleDeepLink,
@@ -521,6 +525,24 @@ const windowWorkspaceMap = new Map<number, Set<string>>();
 const windowTaskRealtimeHostIdMap = new Map<number, string>();
 const windowUnreadCountMap = new Map<number, number>();
 const windowHostProcessMap = new Map<number, ElectronUtilityProcess>();
+
+// 常驻 cron scheduler 进程句柄；app ready 后拉起，退出前销毁。
+let cronScheduler: CronSchedulerHandle | null = null;
+// host → main 的定时任务派发结果，转交给 scheduler 结算。经模块变量转发以避免 spawn 顺序耦合。
+function forwardCronRunResult(
+  result: Parameters<CronSchedulerHandle["handleCronRunResult"]>[0],
+): void {
+  cronScheduler?.handleCronRunResult(result);
+}
+function wakeCronScheduler(automationId: string): void {
+  cronScheduler?.wake(automationId);
+}
+// 选一个本地 host 执行派发：本地 workspace 由任一本地窗口 host 的 createTask 按 path 拉起/复用 agent。
+function resolveCronDispatchHost(): ElectronUtilityProcess | null {
+  const first = windowHostProcessMap.values().next();
+  return first.done ? null : first.value;
+}
+
 const cuaPipFocusRouter = createCuaPipFocusRouter({
   send: (windowId, event) => {
     windowHostProcessMap.get(windowId)?.postMessage({
@@ -717,6 +739,9 @@ async function prepareAppQuit(reason: string, kind: AppShutdownKind = "normal"):
     logger,
     { exitCode: 0, exitKind: "normal" },
   );
+  const cronSchedulerToDispose = cronScheduler;
+  cronScheduler = null;
+
   const hostProcesses = [
     ...new Set([...windowHostProcessMap.values(), ...listDisposingHostProcesses()]),
   ];
@@ -725,6 +750,15 @@ async function prepareAppQuit(reason: string, kind: AppShutdownKind = "normal"):
   );
 
   appQuitPreparationInFlight = Promise.all([
+    // cron scheduler 与 Host 无关闭依赖：与 Host 清理并行进入同一屏障，
+    // 避免串行等待 scheduler 的 1.5s dispose deadline 放大退出总预算。
+    (async () => {
+      try {
+        await cronSchedulerToDispose?.dispose();
+      } catch (error) {
+        logger.warn(`[app-quit] cron scheduler dispose failed (${reason}):`, error);
+      }
+    })(),
     // remote session、attachment 和 transport 都由窗口 Host 持有；这里先清理
     // Main 的请求关联，再由下方每窗口唯一 Host 的 shutdown barrier 释放真实连接与 Agent。
     remoteSessionManager.disposeAllAndWaitForAppShutdown(reason),
@@ -1002,6 +1036,8 @@ function createWindowInstance(startupBootstrap: StartupWindowBootstrap = {}) {
           onAgentProcessException: (event) => reportAgentProcessExceptionToArms(event, logger),
           onAgentProcessReady: (event) => reportAgentProcessReadyToArms(event, logger),
           onAgentProcessSpawned: (event) => reportAgentProcessStartToArms(event, logger),
+          onCronRunResult: forwardCronRunResult,
+          onCronSchedulerWakeRequested: wakeCronScheduler,
           authorizeLocalMediaPreviewPath: localMediaPreviewPathRegistry.authorize,
           // browser-use：main 用 WebContentsView+CDP 执行命令。
           handleBrowserExecuteRequest: ({ win: browserWin, ...request }) =>
@@ -1127,6 +1163,18 @@ app.whenReady().then(async () => {
     markExplicitQuit("database-startup-exit");
     app.quit();
   });
+  // scheduler 也会打开 tasks-index；等 Host 完成统一准备，避免在启动页出现前抢先迁移。
+  onLocalDatabaseStartupReady(() => {
+    try {
+      cronScheduler = spawnCronScheduler({
+        hostProcessLocalEnv,
+        logger,
+        resolveDispatchHost: resolveCronDispatchHost,
+      });
+    } catch (error) {
+      logger.error("[cron-scheduler] failed to spawn scheduler process:", error);
+    }
+  });
   if (process.platform === "win32") {
     // 打包态必须与 NSIS 快捷方式使用同一 AUMID，否则 Shell 把它们当成不同应用。
     // 使用构建期产品身份，不依赖用户机器环境；开发态继续保持独立身份。
@@ -1143,6 +1191,7 @@ app.whenReady().then(async () => {
     platform: process.platform,
     locale: currentApplicationLocale,
     homeDir: app.getPath("home"),
+    productFlavor: ZCODE_PRODUCT_FLAVOR,
     logger,
   });
   await installWindowsOpenFolderContextMenu({
@@ -1239,6 +1288,7 @@ app.whenReady().then(async () => {
         platform: process.platform,
         locale: currentApplicationLocale,
         homeDir: app.getPath("home"),
+        productFlavor: ZCODE_PRODUCT_FLAVOR,
         logger,
       });
       // Windows Explorer 右键菜单是注册表持久项，renderer 切换语言不会自动刷新。

@@ -17,6 +17,7 @@ import {
   Keyboard,
   FileSearch,
   BarChart3,
+  AlarmClock,
 } from "lucide-react";
 import { isSettingsSectionEnabled, type SettingsSectionId } from "@/lib/settingsNavigation.js";
 import type { Theme } from "@/useTheme.js";
@@ -106,6 +107,13 @@ const BASE_SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
     id: "commands",
     icon: Terminal,
     titleId: "settings.commands.title",
+    groupId: "agentCapabilities",
+  },
+  {
+    id: "automations",
+    icon: AlarmClock,
+    titleId: "settings.automations.title",
+    titleBadgeId: "settings.automations.betaBadge",
     groupId: "agentCapabilities",
   },
   {

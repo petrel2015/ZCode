@@ -193,6 +193,15 @@ export {
 } from "./runtime-tools/runtimeCommandEnv.js";
 
 // 定时任务管理与 scheduler 共用同一套 node-only 存储和 cron 语义。
+export {
+  AutomationRepo,
+  DISPATCH_RETRY_BASE_MS,
+  DISPATCH_RETRY_CAP_MS,
+  DISPATCH_MAX_ATTEMPTS,
+  CLAIM_STALE_MS,
+  computeRetryAt,
+} from "./session/automationRepo.js";
+export { AutomationService, InvalidCronExprError } from "./session/automationService.js";
 // 闲时任务与 automation 同库不同表；类型/常量全独立。
 // host 域终态回填 files_changed 复用现有 task diff 汇总。
 export { buildTaskChangeSummary } from "./session/taskChangeSummary.js";
@@ -202,6 +211,13 @@ export {
   createOfficialMcpAuthHeadersResolver,
   resolveOfficialMcpCredentials,
 } from "./official-mcp/officialMcpCredentials.js";
+export {
+  computeAutomationNextRunAt,
+  computeNextRunAt,
+  computeScheduleRuleNextRunAt,
+  isOneShotAutomation,
+  isValidCronExpr,
+} from "./session/automationCron.js";
 import { ServiceCollection } from "./collection.js";
 import { IFileService } from "./file/file.js";
 import { IMediaPreviewService } from "./media-preview/mediaPreview.js";
@@ -352,6 +368,8 @@ import {
   isZCodeCuaMcpPackageArg,
   isZCodeCuaInternalFeatureEnabled,
   ZCODE_CUA_PLUGIN_AUTHORITY_ENV_KEY,
+  type ZCodeAutomation,
+  type ZCodeAutomationRun,
   ZCODE_DESKTOP_CONTEXT_PROMPT_ENABLED_ENV,
 } from "@zcode/shared";
 import { IConversationShareService } from "./conversation-share/conversationShare.js";
@@ -1111,6 +1129,11 @@ export function createLocalServices(options: {
   forwardSessionMessageSendRequested?: (
     request: SessionMessageSendRequested,
   ) => Promise<void> | void;
+  /** desktop local host 在 manual run 落库后直接派发，不经过 scheduler 正常路径。 */
+  onAutomationManualRunRequested?: (params: {
+    automation: ZCodeAutomation;
+    run: ZCodeAutomationRun;
+  }) => Promise<void>;
   // 注入点：默认 resolver 已能覆盖 dev/桌面/SSH 远端三类形态；
   // 测试或特殊宿主想强制走自定义 binary/参数时从这里注入。
   zcodeAgentCommandResolver?: ZCodeAgentCommandResolver;
@@ -1695,6 +1718,7 @@ export function createLocalServices(options: {
     // 动态工作流灰度：与 Off-Peak 不同，
     // 这里不按 serviceAuthorityMode 裁剪——SSH/WSL/Docker 的 desktop-attached-remote Host
     // 是它自己那些 workspace 的唯一裁决者，灰度开启时远程 workspace 同样提供工作流。
+    onAutomationManualRunRequested: options?.onAutomationManualRunRequested,
     commandResolver: options?.zcodeAgentCommandResolver,
     presentationSurface: resolveZCodeAgentPresentationSurface({
       runtimeSurface: options?.agentRuntimeContext?.runtimeSurface,
