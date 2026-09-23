@@ -2,7 +2,7 @@ import type { ZCodeRuntimeEnv } from "./runtimeEnv.js";
 
 export type ZCodeEnv = "test" | "production";
 /** 安装包身份：决定应用名、app id、Electron 数据目录与更新策略；与后端环境 `ZCodeEnv` 是两个轴。 */
-export type ZCodeProductFlavor = "production" | "preview";
+export type ZCodeProductFlavor = "production" | "preview" | "standalone";
 export type ArmsRumEnv = "local" | "prod";
 
 // 非构建环境（如 e2e 测试的 mocha）下 define 不存在，用 typeof 检查 + fallback 避免 ReferenceError
@@ -27,7 +27,7 @@ export function normalizeZCodeProductFlavor(
   zcodeEnv: ZCodeEnv,
 ): ZCodeProductFlavor {
   const normalized = value?.trim().toLowerCase();
-  if (normalized === "production" || normalized === "preview") {
+  if (normalized === "production" || normalized === "preview" || normalized === "standalone") {
     return normalized;
   }
   return zcodeEnv === "production" ? "production" : "preview";
@@ -37,6 +37,14 @@ export const ZCODE_PRODUCT_FLAVOR = normalizeZCodeProductFlavor(
   typeof __ZCODE_PRODUCT_FLAVOR__ !== "undefined" ? __ZCODE_PRODUCT_FLAVOR__ : undefined,
   ZCODE_ENV,
 );
+
+/**
+ * deep-link scheme 与身份绑定：standalone 用独立 scheme，避免与同机安装的正式/Preview 版
+ * 互抢 `zcode://` 协议归属（macOS LaunchServices 后注册者胜、Linux 用户级 desktop entry
+ * 会遮蔽系统级条目）。事实源是构建期身份表，这里只做编译期同源派生。
+ */
+export const ZCODE_DEEP_LINK_SCHEME: string =
+  ZCODE_PRODUCT_FLAVOR === "standalone" ? "zcode-standalone" : "zcode";
 export const ZCODE_APP_VERSION_ENV = "ZCODE_APP_VERSION" as const;
 export const ZCODE_BUILD_COMMIT_ID_ENV = "ZCODE_BUILD_COMMIT_ID" as const;
 

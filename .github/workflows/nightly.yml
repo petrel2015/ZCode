@@ -23,8 +23,11 @@ defaults:
 
 env:
   # 不设置时默认 test 后端，产物会变成 `ZCode Preview-...-TEST`；
-  # nightly 面向日常使用，显式切到 production 得到正式 `ZCode` 身份与无后缀文件名。
+  # nightly 面向日常使用，显式切到 production 得到正式后端。
   ZCODE_ENV: production
+  # nightly 是 standalone 发行身份（ZCode Standalone + 叛忍战损标识），
+  # 与官方编译版并排安装不冲突：独立 appId/应用名/包名/deep-link scheme 与数据目录。
+  ZCODE_STANDALONE_IDENTITY: "1"
   # mock-cdn remote 资产只服务于 E2E/dev（extraResources 不引用它），
   # 上游 Windows CI 同样跳过该步骤，避免 nightly 无谓拉长构建时间。
   ZCODE_SKIP_REMOTE_ASSETS: "1"
@@ -165,10 +168,11 @@ jobs:
           | Windows x64 | \*-win-x64.exe |
           | Linux x64 | \*.AppImage / \*.deb / \*.rpm / \*.pkg.tar.zst |
 
-          > 注意：本 nightly 为 ad-hoc 签名构建（未走 Apple 公证）。macOS 首次打开若提示
+          > 注意：本 nightly 为 `ZCode Standalone` 身份（ad-hoc 签名、未走 Apple 公证），
+          > 可与官方 ZCode 并排安装、互不冲突。macOS 首次打开若提示
           > 「无法验证开发者」或「无法检查是否包含恶意软件」，前往 系统设置 → 隐私与安全性，
           > 点击「仍要打开」即可，无需终端命令；也可执行
-          > \`xattr -dr com.apple.quarantine /Applications/ZCode.app\` 直接放行。
+          > \`xattr -dr com.apple.quarantine "/Applications/ZCode Standalone.app"\` 直接放行。
           > 完整校验值见 \`SHA256SUMS.txt\`。
           EOF
           gh release create "$NIGHTLY_TAG" artifacts/* \

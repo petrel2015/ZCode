@@ -3,7 +3,12 @@ import { statSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 import { app, BrowserWindow, dialog } from "electron";
 import type { WebContents } from "electron";
-import { type Locale, PlatformChannels } from "@zcode/shared";
+import {
+  type Locale,
+  PlatformChannels,
+  ZCODE_DEEP_LINK_SCHEME,
+  ZCODE_PRODUCT_FLAVOR,
+} from "@zcode/shared";
 import { extractWorkspaceOpenPath, isWorkspaceOpenUrl } from "./desktopDeepLinkUrl.js";
 import { registerLinuxDeepLinkProtocol } from "./desktopLinuxDeepLinkRegistration.js";
 
@@ -231,7 +236,9 @@ export function registerDeepLinkProtocol(
   },
   options: { iconPath?: string } = {},
 ) {
-  const scheme = "zcode";
+  // scheme 与身份绑定：standalone 注册 zcode-standalone，避免与同机的正式/Preview 安装
+  // 互抢 zcode:// handler（macOS 后注册者胜、Linux 用户级条目遮蔽系统级条目）。
+  const scheme = ZCODE_DEEP_LINK_SCHEME;
 
   if (process.defaultApp && process.argv.length >= 2) {
     const entry = resolve(process.argv[1]!);
@@ -268,6 +275,11 @@ export function registerDeepLinkProtocol(
       env: process.env,
       argv: process.argv,
       logger,
+      // 身份注入：standalone 用独立条目 id/scheme/marker，与正式版安装的用户级注册互不遮蔽。
+      desktopEntryId: ZCODE_PRODUCT_FLAVOR === "standalone" ? "zcode-standalone" : undefined,
+      scheme,
+      ownershipMarker:
+        ZCODE_PRODUCT_FLAVOR === "standalone" ? "Comment=ZCode Standalone Desktop App" : undefined,
     });
   }
 }

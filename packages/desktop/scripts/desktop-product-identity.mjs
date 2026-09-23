@@ -5,12 +5,19 @@
  */
 export const ZCODE_PREVIEW_IDENTITY_ENV = "ZCODE_PREVIEW_IDENTITY";
 
+/**
+ * 构建期开关：为真时安装包使用 Standalone 身份（`ZCode Standalone`），用于 standalone
+ * 分支发行版与官方编译版并排安装。身份与后端环境是两个轴，开关优先级高于 Preview。
+ */
+export const ZCODE_STANDALONE_IDENTITY_ENV = "ZCODE_STANDALONE_IDENTITY";
+
 const PRODUCTION_IDENTITY = Object.freeze({
   flavor: "production",
   appId: "dev.zcode.app",
   productName: "ZCode",
   linuxExecutableName: "zcode",
   linuxPackageName: "zcode",
+  deepLinkScheme: "zcode",
   cuaHelperInstallVariant: null,
 });
 
@@ -20,12 +27,26 @@ const PREVIEW_IDENTITY = Object.freeze({
   productName: "ZCode Preview",
   linuxExecutableName: "zcode-preview",
   linuxPackageName: "zcode-preview",
+  deepLinkScheme: "zcode",
   cuaHelperInstallVariant: "preview",
+});
+
+// standalone 与官方版必须全链路隔离：appId/应用名/可执行名决定安装与数据目录，
+// deep-link scheme 决定 macOS/Linux 的协议归属，避免两个应用互抢 zcode:// handler。
+const STANDALONE_IDENTITY = Object.freeze({
+  flavor: "standalone",
+  appId: "dev.zcode.standalone",
+  productName: "ZCode Standalone",
+  linuxExecutableName: "zcode-standalone",
+  linuxPackageName: "zcode-standalone",
+  deepLinkScheme: "zcode-standalone",
+  cuaHelperInstallVariant: null,
 });
 
 export const desktopProductIdentities = Object.freeze({
   production: PRODUCTION_IDENTITY,
   preview: PREVIEW_IDENTITY,
+  standalone: STANDALONE_IDENTITY,
 });
 
 function normalizeDesktopZCodeEnv(env) {
@@ -50,13 +71,31 @@ export function isPreviewIdentityRequested(env = process.env) {
   );
 }
 
+export function isStandaloneIdentityRequested(env = process.env) {
+  const value = env[ZCODE_STANDALONE_IDENTITY_ENV]?.trim() ?? "";
+  if (value === "1") {
+    return true;
+  }
+  if (value === "" || value === "0") {
+    return false;
+  }
+  throw new Error(
+    `invalid ${ZCODE_STANDALONE_IDENTITY_ENV}=${env[ZCODE_STANDALONE_IDENTITY_ENV]}; expected 1 or 0`,
+  );
+}
+
 /**
  * 产品身份（flavor）与后端环境（`ZCODE_ENV`）是两个轴：
  * - `ZCODE_ENV=test` 一律是 Preview，测试后端不能顶着正式 `ZCode` 身份覆盖用户的正式安装；
- * - `ZCODE_ENV=production` 默认是正式身份，显式 `ZCODE_PREVIEW_IDENTITY=1` 时改用 Preview 身份。
+ * - `ZCODE_ENV=production` 默认是正式身份，显式 `ZCODE_PREVIEW_IDENTITY=1` 时改用 Preview 身份；
+ * - `ZCODE_STANDALONE_IDENTITY=1` 显式请求 standalone 分支发行身份，优先级最高，
+ *   保证夜间构建无论后端环境如何都保持 `ZCode Standalone` 的安装隔离。
  * 未知 `ZCODE_ENV` 继续按 test 处理，和共享层 normalizeZCodeEnv 的 fail-safe 默认值一致。
  */
 export function resolveDesktopProductFlavor(env = process.env) {
+  if (isStandaloneIdentityRequested(env)) {
+    return "standalone";
+  }
   if (isPreviewIdentityRequested(env)) {
     return "preview";
   }
@@ -86,7 +125,11 @@ export function resolveWindowsAppUserModelIdForFlavor(flavor, runtime = { isPack
   if (runtime.isPackaged === false) {
     return "cn.aminer.zcode";
   }
-  return desktopProductIdentities[flavor === "preview" ? "preview" : "production"].appId;
+  // 未知 flavor（历史调用）按 production 处理；standalone 有独立 AUMID，避免与正式安装
+  // 的开始菜单索引、快捷方式互抢。
+  return desktopProductIdentities[
+    flavor === "preview" || flavor === "standalone" ? flavor : "production"
+  ].appId;
 }
 
 export function resolveWindowsAppUserModelId(env = process.env, runtime = { isPackaged: true }) {
