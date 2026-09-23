@@ -182,6 +182,17 @@ export function spawnHostProcess(
       event: HostCuaOperationStateResponse,
     ) => void;
     onCuaOperationStateSourceExited?: (source: ElectronUtilityProcess) => void;
+    /** host → main：定时任务派发结果，转交给 cron scheduler 结算调度状态机。 */
+    onCronRunResult?: (result: {
+      runId: string;
+      ok: boolean;
+      taskId?: string;
+      sessionId?: string;
+      error?: string;
+      failureKind?: "transient" | "permanent";
+    }) => void;
+    /** host 中 manual run 落库后请求 main 立即唤醒 scheduler。 */
+    onCronSchedulerWakeRequested?: (automationId: string) => void;
     // browser-use：main 用 WebContentsView+CDP 执行一条命令。实现由宿主注入；缺省则 backend_unavailable。
     handleBrowserExecuteRequest?: (params: {
       win: BrowserWindow;
@@ -441,6 +452,24 @@ export function spawnHostProcess(
       dependencies.onAgentProcessException?.(result.data);
       return;
     }
+
+    if (result.data.type === HostResponseTypes.CronRunResult) {
+      dependencies.onCronRunResult?.({
+        runId: result.data.runId,
+        ok: result.data.ok,
+        taskId: result.data.taskId,
+        sessionId: result.data.sessionId,
+        error: result.data.error,
+        failureKind: result.data.failureKind,
+      });
+      return;
+    }
+
+    if (result.data.type === HostResponseTypes.CronSchedulerWakeRequest) {
+      dependencies.onCronSchedulerWakeRequested?.(result.data.automationId);
+      return;
+    }
+
     if (result.data.type === HostResponseTypes.AgentRunningTaskCountChanged) {
       if (result.data.runningTaskCount > 0) {
         dependencies.hostRunningTaskCountMap.set(child, result.data.runningTaskCount);

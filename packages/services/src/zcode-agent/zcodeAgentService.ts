@@ -93,6 +93,11 @@ import {
   type ZCodeSessionStateSnapshot,
   type ZCodeAutomation,
   type ZCodeAutomationRun,
+  zcodeAutomationCreateParamsSchema,
+  zcodeAutomationListParamsSchema,
+  zcodeAutomationCheckTaskBindingParamsSchema,
+  zcodeAutomationUpdateParamsSchema,
+  zcodeAutomationDeleteParamsSchema,
   zcodeWorkspaceUpdateOffPeakToolPolicyResultSchema,
   zcodeWorkspaceUpdateDynamicWorkflowPolicyResultSchema,
   type DynamicWorkflowClientConfig,
@@ -125,6 +130,7 @@ import type {
   ZCodeWorkspacePresentation,
   ZCodeWorkspaceRef,
   ZCodeSessionRuntimePreferencesResult,
+  ZCodeTaskMode,
 } from "@zcode/shared";
 import type {
   IZCodeAgentService,
@@ -137,6 +143,11 @@ import type {
   ZCodeAgentCompactParams,
   ZCodeAgentConfigurePluginParams,
   ZCodeAgentResetPluginConfigParams,
+  ZCodeAgentAutomationIdParams,
+  ZCodeAgentCreateAutomationParams,
+  ZCodeAgentDeleteAutomationRunParams,
+  ZCodeAgentSetAutomationEnabledParams,
+  ZCodeAgentUpdateAutomationParams,
   ZCodeAgentCreateSessionParams,
   ZCodeAgentInstallPluginParams,
   ZCodeAgentGenerateWorkspaceTextParams,
@@ -276,6 +287,8 @@ import {
   readTrustedZCodeAgentV4UnsubscribeRoute,
 } from "./zcodeAgentConnectionScope.js";
 import { createBackgroundSessionEventCoalescer } from "#src/zcode-agent/zcodeSessionEventCoalescer.js";
+import { AutomationService } from "#src/session/automationService.js";
+import { AutomationRepo } from "#src/session/automationRepo.js";
 import { TaskIndexRepo } from "#src/session/taskIndexRepo.js";
 import { ZCodeAgentMcpStatusModeUnsupportedError } from "#src/zcode-agent/zcodeAgentErrors.js";
 import { ZCodeAgentProcessManager } from "./zcodeAgentProcessManager.js";
@@ -396,6 +409,28 @@ function supportsLegacyRemoteTaskAllowlist(workspaceIdentity: string | undefined
     workspaceIdentity?.startsWith(SSH_REMOTE_WORKSPACE_IDENTITY_PREFIX) ||
     workspaceIdentity?.startsWith(WSL_REMOTE_WORKSPACE_IDENTITY_PREFIX),
   );
+}
+
+function toProtocolAutomation(automation: ZCodeAutomation) {
+  return {
+    automationId: automation.automationId,
+    title: automation.title,
+    cronExpr: automation.cronExpr,
+    prompt: automation.prompt,
+    modelSelection: automation.modelSelection,
+    mode: automation.mode,
+    targetTaskId: automation.targetTaskId,
+    enabled: automation.enabled,
+    lifecycleStatus: automation.lifecycleStatus,
+    nextRunAt: automation.nextRunAt,
+    lastRunAt: automation.lastRunAt,
+    runCount: automation.runCount,
+    recurring: automation.recurring,
+    maxRuns: automation.maxRuns,
+    // 透传权威 scheduleRule；会话卡片必须读到本字段才能展示 cron 无法表达的真实间隔
+    // （如每50小时、每40天），否则只能从兼容 cronExpr 推断出「每小时的第00分」等错误展示。
+    scheduleRule: automation.scheduleRule,
+  };
 }
 
 function isClosedStdioTransportError(error: unknown): boolean {
@@ -942,6 +977,10 @@ export function createZCodeAgentService(
         })
       : undefined;
   // AutomationRepo 也持有 tasks-index.sqlite 连接，disposeAll 需一并收口（见下方 disposeAll 注释）
+  // 定时任务（automation）在 standalone 化时曾被移除；恢复本地 cron 调度所需的
+  // 存储/领域服务原样回归——纯本地实现，不依赖平台登录或计费。
+  const automationRepo = new AutomationRepo();
+  const automationService = new AutomationService(automationRepo);
   const automationTaskIndexRepo = new TaskIndexRepo();
   const pluginProcessManager = new ZCodeAgentProcessManager({
     commandResolver: options?.commandResolver,
@@ -2345,6 +2384,186 @@ export function createZCodeAgentService(
             });
           return;
         }
+        if (request.method === zcodeProtocolMethods.automationCreate) {
+          const parsed = zcodeAutomationCreateParamsSchema.safeParse(request.params);
+          if (!parsed.success) {
+            void client.respondError(request.id, {
+              code: -32602,
+              message: "Invalid automation create params",
+              data: parsed.error.flatten(),
+            });
+            return;
+          }
+          void (async () => {
+            try {
+              const automation = await automationService.create({
+                title: parsed.data.title ?? "",
+                cronExpr: parsed.data.cronExpr,
+                relativeDelayMinutes: parsed.data.relativeDelayMinutes,
+                // 会话侧长间隔 carrier（intervalUnit+interval）透传给 service 归一化为权威 scheduleRule。
+                intervalUnit: parsed.data.intervalUnit,
+                interval: parsed.data.interval,
+                prompt: parsed.data.prompt,
+                modelSelection: parsed.data.modelSelection,
+                mode: parsed.data.mode,
+                targetTaskId: parsed.data.targetTaskId,
+                workspacePath: workspace.workspacePath,
+                workspaceIdentity: workspace.workspaceIdentity,
+                recurring: parsed.data.recurring ?? true,
+                maxRuns: parsed.data.maxRuns,
+              });
+              if (automation.targetTaskId) {
+                const taskMeta = await automationTaskIndexRepo
+                  .getTaskMeta({
+                    workspacePath: automation.workspacePath,
+                    workspaceIdentity: automation.workspaceIdentity,
+                    taskId: automation.targetTaskId,
+                  })
+                  .catch(() => null);
+                if (taskMeta) {
+                  await automationTaskIndexRepo.syncTaskMeta({
+                    meta: {
+                      ...taskMeta,
+                      // 会话内创建的 automation 复用当前 session；显式写入标记供 V4 侧栏展示。
+                      cronAutomationId: automation.automationId,
+                      updatedAt: Math.max(taskMeta.updatedAt, Date.now()),
+                    },
+                  });
+                }
+              }
+              await client.respond(request.id, {
+                automation: toProtocolAutomation(automation),
+              });
+            } catch (error) {
+              await client.respondError(request.id, {
+                code: -32603,
+                message: error instanceof Error ? error.message : String(error),
+              });
+            }
+          })();
+          return;
+        }
+
+        if (request.method === zcodeProtocolMethods.automationList) {
+          const parsed = zcodeAutomationListParamsSchema.safeParse(request.params ?? {});
+          if (!parsed.success) {
+            void client.respondError(request.id, {
+              code: -32602,
+              message: "Invalid automation list params",
+              data: parsed.error.flatten(),
+            });
+            return;
+          }
+          void (async () => {
+            try {
+              const automations = await automationService.list(workspace);
+              await client.respond(request.id, {
+                automations: automations.map(toProtocolAutomation),
+              });
+            } catch (error) {
+              await client.respondError(request.id, {
+                code: -32603,
+                message: error instanceof Error ? error.message : String(error),
+              });
+            }
+          })();
+          return;
+        }
+
+        if (request.method === zcodeProtocolMethods.automationCheckTaskBinding) {
+          const parsed = zcodeAutomationCheckTaskBindingParamsSchema.safeParse(request.params);
+          if (!parsed.success) {
+            void client.respondError(request.id, {
+              code: -32602,
+              message: "Invalid automation task binding params",
+              data: parsed.error.flatten(),
+            });
+            return;
+          }
+          void (async () => {
+            try {
+              const bound = await automationService.hasTaskBinding({
+                workspacePath: workspace.workspacePath,
+                workspaceIdentity: workspace.workspaceIdentity,
+                targetTaskId: parsed.data.targetTaskId,
+              });
+              await client.respond(request.id, { bound });
+            } catch (error) {
+              await client.respondError(request.id, {
+                code: -32603,
+                message: error instanceof Error ? error.message : String(error),
+              });
+            }
+          })();
+          return;
+        }
+
+        if (request.method === zcodeProtocolMethods.automationUpdate) {
+          const parsed = zcodeAutomationUpdateParamsSchema.safeParse(request.params);
+          if (!parsed.success) {
+            void client.respondError(request.id, {
+              code: -32602,
+              message: "Invalid automation update params",
+              data: parsed.error.flatten(),
+            });
+            return;
+          }
+          void (async () => {
+            try {
+              const automation = await automationService.update(
+                parsed.data.automationId,
+                {
+                  title: parsed.data.title,
+                  cronExpr: parsed.data.cronExpr,
+                  prompt: parsed.data.prompt,
+                  recurring: parsed.data.recurring,
+                  maxRuns: parsed.data.maxRuns,
+                  // 会话侧长间隔 carrier（intervalUnit+interval）透传给 service 归一化为权威 scheduleRule。
+                  intervalUnit: parsed.data.intervalUnit,
+                  interval: parsed.data.interval,
+                },
+                workspace,
+              );
+              if (!automation) {
+                throw new Error("Scheduled task not found in the current workspace.");
+              }
+              await client.respond(request.id, {
+                automation: toProtocolAutomation(automation),
+              });
+            } catch (error) {
+              await client.respondError(request.id, {
+                code: -32603,
+                message: error instanceof Error ? error.message : String(error),
+              });
+            }
+          })();
+          return;
+        }
+
+        if (request.method === zcodeProtocolMethods.automationDelete) {
+          const parsed = zcodeAutomationDeleteParamsSchema.safeParse(request.params);
+          if (!parsed.success) {
+            void client.respondError(request.id, {
+              code: -32602,
+              message: "Invalid automation delete params",
+              data: parsed.error.flatten(),
+            });
+            return;
+          }
+          void (async () => {
+            try {
+              const deleted = await automationService.delete(parsed.data.automationId, workspace);
+              await client.respond(request.id, { deleted });
+            } catch (error) {
+              await client.respondError(request.id, {
+                code: -32603,
+                message: error instanceof Error ? error.message : String(error),
+              });
+            }
+          })();
+          return;
+        }
+
         void client.respondError(request.id, {
           code: -32601,
           message: `Unsupported ZCode Protocol request: ${request.method}`,
@@ -3766,6 +3985,109 @@ export function createZCodeAgentService(
       );
     },
 
+    async listAutomations(params: ZCodeAgentWorkspaceTarget) {
+      return automationService.list(params);
+    },
+
+    async listAllAutomations() {
+      return automationService.list();
+    },
+
+    async createAutomation(params: ZCodeAgentCreateAutomationParams) {
+      return automationService.create({
+        title: params.title,
+        cronExpr: params.cronExpr,
+        relativeDelayMinutes: params.relativeDelayMinutes,
+        prompt: params.prompt,
+        modelSelection: params.modelSelection,
+        mode: params.mode as ZCodeTaskMode | undefined,
+        workspacePath: params.workspacePath,
+        workspaceIdentity: params.workspaceIdentity,
+        recurring: params.recurring ?? true,
+        maxRuns: params.maxRuns,
+        endAt: params.endAt,
+        scheduleRule: params.scheduleRule,
+      });
+    },
+
+    async updateAutomation(params: ZCodeAgentUpdateAutomationParams) {
+      return automationService.update(
+        params.automationId,
+        {
+          title: params.title,
+          cronExpr: params.cronExpr,
+          prompt: params.prompt,
+          modelSelection: params.modelSelection,
+          mode: params.mode === null ? null : (params.mode as ZCodeTaskMode | undefined),
+          recurring: params.recurring,
+          maxRuns: params.maxRuns,
+          endAt: params.endAt,
+          scheduleRule: params.scheduleRule,
+          scheduleEditedByUser: params.scheduleEditedByUser,
+        },
+        // 归属校验：写操作必须限定在调用方当前 workspace，禁止跨 workspace 越权。
+        {
+          workspacePath: params.workspacePath,
+          workspaceIdentity: params.workspaceIdentity,
+        },
+      );
+    },
+
+    async deleteAutomation(params: ZCodeAgentAutomationIdParams) {
+      await automationService.delete(params.automationId, {
+        workspacePath: params.workspacePath,
+        workspaceIdentity: params.workspaceIdentity,
+      });
+    },
+
+    async setAutomationEnabled(params: ZCodeAgentSetAutomationEnabledParams) {
+      return automationService.setEnabled(params.automationId, params.enabled, {
+        workspacePath: params.workspacePath,
+        workspaceIdentity: params.workspaceIdentity,
+      });
+    },
+
+    async restartAutomation(params: ZCodeAgentAutomationIdParams) {
+      return automationService.restart(params.automationId, {
+        workspacePath: params.workspacePath,
+        workspaceIdentity: params.workspaceIdentity,
+      });
+    },
+
+    async runAutomationNow(params: ZCodeAgentAutomationIdParams) {
+      const dispatch = options?.onAutomationManualRunRequested;
+      if (!dispatch) {
+        // runNow 会先写 manual run 并占用 single-flight claim；dispatcher
+        // 缺失是同步可判定的配置错误，必须在认领前失败，不能依赖 stale 崩溃回收。
+        throw new Error("Automation immediate dispatcher is unavailable.");
+      }
+      const claimed = await automationService.runNow(params.automationId, {
+        workspacePath: params.workspacePath,
+        workspaceIdentity: params.workspaceIdentity,
+      });
+      if (!claimed) {
+        // single-flight 已拒绝重复运行时，旧的空成功返回会被 UI 误判为
+        // 新 run 已入队，导致每次重复点击都展示一次“已触发”。
+        return { status: "duplicate" as const };
+      }
+      await dispatch(claimed);
+      return { status: "queued" as const };
+    },
+
+    async listAutomationRuns(params: ZCodeAgentAutomationIdParams) {
+      return automationService.listRuns(params.automationId, {
+        workspacePath: params.workspacePath,
+        workspaceIdentity: params.workspaceIdentity,
+      });
+    },
+
+    async deleteAutomationRun(params: ZCodeAgentDeleteAutomationRunParams) {
+      return automationService.deleteRun(params.runId, {
+        workspacePath: params.workspacePath,
+        workspaceIdentity: params.workspaceIdentity,
+      });
+    },
+
     async generateWorkspaceText(params: ZCodeAgentGenerateWorkspaceTextParams) {
       const client = await getClient(params);
       // Worker 自己读取 ZCode Built-in / Personal Config；Host 只在执行前确保账号状态形成的
@@ -5052,6 +5374,7 @@ export function createZCodeAgentService(
       mcpStatusProcessManager.disposeAll();
       // automation 专用的 AutomationRepo / TaskIndexRepo 各持 tasks-index.sqlite
       // 连接句柄，dispose 后必须收口，否则 Windows 上句柄悬着（临时目录清理撞 EBUSY）
+      automationRepo.close();
       automationTaskIndexRepo.close();
       disposeLocalState();
     },
@@ -5062,6 +5385,7 @@ export function createZCodeAgentService(
         pluginProcessManager.disposeAllAndWait(),
         mcpStatusProcessManager.disposeAllAndWait(),
       ]);
+      automationRepo.close();
       automationTaskIndexRepo.close();
       disposeLocalState();
     },

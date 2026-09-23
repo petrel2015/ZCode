@@ -4,6 +4,19 @@
 
 仅记录本个人分支的改动；上游历史见 Git 提交记录。当前应用版本仍以根目录 `package.json` 为准，本次没有创建 Tag 或 Release。
 
+## [未发布] — 恢复本地定时任务（Automations/cron）
+
+### 新增
+
+- 定时任务以纯本地能力回归：`CronCreate/CronList/CronUpdate/CronDelete` Agent 工具、`automation/*` RPC 服务与 `tasks-index.sqlite` 本地持久化。
+- 恢复桌面端 cron scheduler 常驻进程（认领/派发状态机：misfire 跳过、single-flight 认领、失败退避重试）与 Host 派发链路（`CronRun` → createTask/resumeTask + sendPrompt），支持「立即运行」手动派发与终态回写。
+- 恢复设置页 Automations 分区与「automations」主视图，页内自带「自动化 / 工作流」页级 Tab；已保存工作流以工作流 Tab 形式保留。
+
+### 未恢复（设计上依赖平台）
+
+- 闲时任务（off-peak）管理、coding-plan 转化入口、远端 client-scenes 模板目录（保留手动创建）与定时编辑器内的 start-plan 模型推荐。
+- `scripts/check-standalone-surface.mjs` 放开 `src/scheduler/` 构建入口，继续拒绝 coding-plan webview。
+
 ## [未发布] — 独立 GLM 运行
 
 ### 调整

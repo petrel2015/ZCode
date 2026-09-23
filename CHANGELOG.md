@@ -4,6 +4,19 @@ English | [简体中文](CHANGELOG.zh.md)
 
 This log covers the personal branch only; upstream history remains in Git. The application version remains defined by the root `package.json`. No tag or release is created by this change.
 
+## [Unreleased] — Restore local scheduled tasks (Automations/cron)
+
+### Added
+
+- Restore scheduled tasks as a fully local capability: `CronCreate/CronList/CronUpdate/CronDelete` Agent tools, the `automation/*` RPC service, and on-device persistence in `tasks-index.sqlite`.
+- Restore the desktop cron scheduler utility process (claim/dispatch state machine with misfire skip, single-flight claims and retry backoff) and Host dispatch via `CronRun` → createTask/resumeTask + sendPrompt, with manual "run now" dispatch and outcome tracking.
+- Restore the Automations settings section and the "automations" main view with the in-page「自动化 / 工作流」tab switch; saved workflows render as the workflow tab.
+
+### Not restored (platform-dependent by design)
+
+- Off-peak (idle-time) task management, coding-plan funnel surfaces, remote client-scenes template catalog (creation stays manual) and start-plan model recommendation in the automation editor.
+- `scripts/check-standalone-surface.mjs` now allows the `src/scheduler/` build entry while still rejecting the coding-plan webview.
+
 ## [Unreleased] — Standalone GLM runtime
 
 ### Changed

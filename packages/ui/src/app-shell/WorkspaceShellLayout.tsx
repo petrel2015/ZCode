@@ -36,7 +36,7 @@ import { useIsOfficeMode } from "@/hooks/useInterfaceMode.js";
 import { GitBranchSwitcher } from "@/GitBranchSwitcher.js";
 import { ScopedErrorBoundary } from "@/ErrorBoundary.js";
 
-import { WORKFLOWS_TOAST_ANCHOR_ID, WorkflowsSection } from "@/settings/WorkflowsSection.js";
+import { AUTOMATIONS_TOAST_ANCHOR_ID, AutomationsSection } from "@/settings/AutomationsSection.js";
 import type {
   SavedWorkflowLaunchTarget,
   SavedWorkflowsOpenArtifactParams,
@@ -189,7 +189,10 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
   workspaceReadOnlyReason,
   workspaceMainView,
   pluginStoreOpenVersion,
+  openAutomationId,
+  openAutomationTab,
   onWorkspaceMainViewChange,
+  onOpenAutomationConsumed,
   handleOpenAutomations,
   handleOpenPluginStore,
   handleManageInstalledPlugins,
@@ -1737,13 +1740,13 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                     <div className="min-h-0 flex-1 overflow-hidden">
                       {workspaceMainView === "automations" ? (
                         <main
-                          id={WORKFLOWS_TOAST_ANCHOR_ID}
+                          id={AUTOMATIONS_TOAST_ANCHOR_ID}
                           className="flex h-full min-h-0 flex-1 flex-col bg-background"
                         >
                           <AutomationsMainBreadcrumbFrame
                             isDesktop={Boolean(isDesktop)}
                             sectionLabel={intl.formatMessage({
-                              id: "workflows.hub.sectionTitle",
+                              id: "settings.automations.title",
                             })}
                             ariaLabel={intl.formatMessage({
                               id: "automations.breadcrumbLabel",
@@ -1761,13 +1764,29 @@ export const WorkspaceShellLayout = memo(function WorkspaceShellLayoutComponent(
                                 className="min-h-full"
                               >
                                 <div className="mx-auto flex w-full max-w-5xl flex-col px-4 py-4 md:px-6 md:py-6">
-                                  <WorkflowsSection
+                                  {/* standalone 恢复定时任务：主视图回到 AutomationsSection，
+                                      页内自带「自动化 / 工作流」页级 Tab；SavedWorkflows 以 Tab 形式保留。 */}
+                                  <AutomationsSection
                                     workspacePath={workspaceAbsPath}
                                     workspaceIdentity={workspaceIdentity}
                                     onCreateViaChat={handleCreateAutomationInChat}
                                     onNavigateToLaunchedRun={handleNavigateToLaunchedRun}
                                     onOpenWorkflowRun={handleOpenSavedWorkflowRun}
                                     onOpenWorkflowArtifact={handleOpenSavedWorkflowArtifact}
+                                    openAutomationId={openAutomationId}
+                                    openAutomationTab={openAutomationTab}
+                                    onOpenAutomationConsumed={onOpenAutomationConsumed}
+                                    onOpenSession={({
+                                      sessionId,
+                                      workspacePath,
+                                      workspaceIdentity,
+                                    }) =>
+                                      handleSelectTaskInChat(
+                                        workspacePath,
+                                        sessionId,
+                                        workspaceIdentity,
+                                      )
+                                    }
                                   />
                                 </div>
                               </ScopedErrorBoundary>
