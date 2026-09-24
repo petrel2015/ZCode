@@ -1312,7 +1312,7 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebarComponent({
               )}
             >
               <CalendarClock className="size-4" />
-              {intl.formatMessage({ id: "workflows.hub.sectionTitle" })}
+              {intl.formatMessage({ id: "automations.pageTab.automation" })}
             </Button>
             <Button
               variant="ghost"
