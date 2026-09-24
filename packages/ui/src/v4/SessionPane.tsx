@@ -102,7 +102,10 @@ import { WorkspaceHookPendingBanner } from "@/v4/WorkspaceHookPendingBanner.js";
 import { ConversationStatusPanel } from "@/v4/ConversationStatusPanel.js";
 import { SessionSubscriptionErrorPanel } from "@/v4/SessionSubscriptionErrorPanel.js";
 import { ConversationTimeline } from "@/v4/ConversationTimeline.js";
-import { ConversationRunningWorkRateContext } from "@/v4/ConversationTurnGroup.js";
+import {
+  ConversationRunningWorkRateContext,
+  type ConversationRunningWorkRateFacts,
+} from "@/v4/ConversationTurnGroup.js";
 import { ConversationShareImportNotice } from "@/v4/ConversationShareImportNotice.js";
 import { ConversationBottomDockTransition } from "@/v4/ConversationBottomDockTransition.js";
 import { resolveConversationSelectionTooltipEnabled } from "@/v4/conversationShareModePolicy.js";
@@ -3243,6 +3246,23 @@ export function SessionPane({
     !isDraft && (lease === null || sessionLeaseReady) && snapshot?.sessionId === sessionId
       ? snapshot
       : null;
+  // 运行中状态行的会话级速率事实（ConversationRunningWorkRateContext 注入，spec 第三版）：
+  // 思考平均 + 整体平均的分子分母。completedActiveMs 只统计 rows 窗口内已完成轮的
+  // activeMs（超长会话为近似）；运行轮自身时长由状态行每秒跳动的 durationMs 现补。
+  const runningWorkRateFacts = useMemo<ConversationRunningWorkRateFacts>(() => {
+    const rows = timelineSnapshot?.rows.window ?? [];
+    let completedActiveMs = 0;
+    for (const row of rows) {
+      if (row.kind === "turnHeader" && row.activeMs !== undefined) {
+        completedActiveMs += row.activeMs;
+      }
+    }
+    return {
+      modelAvgTokensPerSecond: timelineSnapshot?.usage.throughput?.avgTokensPerSecond ?? null,
+      cumulativeOutputTokens: timelineSnapshot?.usage.cumulative?.outputTokens ?? 0,
+      completedActiveMs,
+    };
+  }, [timelineSnapshot]);
   const shareHandoverContext =
     snapshot?.sharedContextImport && "contextId" in snapshot.sharedContextImport
       ? snapshot.sharedContextImport
@@ -3834,9 +3854,7 @@ export function SessionPane({
             workspaceIdentity={workspaceIdentity}
             workspacePath={workspacePath}
           >
-            <ConversationRunningWorkRateContext.Provider
-              value={timelineSnapshot?.usage.throughput?.avgTokensPerSecond ?? null}
-            >
+            <ConversationRunningWorkRateContext.Provider value={runningWorkRateFacts}>
               <ConversationTimeline
                 scrollToBottomActionRef={timelineScrollToBottomRef}
                 scrollToQueryActionRef={timelineScrollToQueryRef}

@@ -98,10 +98,12 @@ sessionUsageStateSchema.throughput = z
 
 轮历史触发行「已工作 {duration}」追加速率与工时归因，回答「瓶颈在本地还是大模型」：
 
-- **运行中（工作中）**：主行 `工作中 {duration} · 实时 {live} · 思考 {avg} token/s`。
+- **运行中（工作中）**：主行 `工作中 {duration} · 实时 {live} · 平均 {avg} · 思考 {think} token/s`。
   - 实时：对该轮流式行的本地估算（复用 `StreamingRateEstimator`，行级 hook 独立 500ms 采样，重渲染隔离在状态行内）。
-  - 思考平均：运行中尚无本轮 workTiming 事实，显示**会话累计生成口径**（`usage.throughput.avgTokensPerSecond`，与 composer「平均」同源同值；首轮完成前显示 `—`）。悬停注明「会话累计，本轮结束后切换为本轮数据」。
-  - 注入方式：SessionPane 在 Timeline 外层经 `ConversationRunningWorkRateContext` 注入；context 更新穿透 memo 只重渲染状态行，不给 Timeline 增加高频 prop。
+  - 平均：**自会话开始的活跃工时平均** = 会话累计 outputTokens（`usage.cumulative`）÷（Σ 已完成轮 `turnHeader.activeMs` + 当前运行轮已进行时长），与完成后「整体」同口径（排除用户输入等待）、跨轮累计；completedActiveMs 只统计 rows 窗口内的轮头，超长会话为近似值。
+  - 思考平均：会话累计生成口径（`usage.throughput.avgTokensPerSecond`，与 composer「平均」同源同值；首轮完成前显示 `—`）。
+  - 悬停注明两个口径与切换时机（本轮结束后均切换为本轮权威数据）。
+  - 注入方式：SessionPane 在 Timeline 外层经 `ConversationRunningWorkRateContext`（facts：思考平均 + tokens + completedActiveMs）注入；整体平均的除法在状态行内按每秒跳动的 durationMs 现算。context 更新穿透 memo 只重渲染状态行，不给 Timeline 增加高频 prop。
 - **完成后（已工作）**：主行直接常驻双速率 `已工作 {duration} · 整体 {overall} · 思考 {model} token/s`（不藏悬停）；任一速率缺事实时降级为单速率或纯时长。
 - 悬停（title）与展开的历史区头部常显同款拆分行（触屏/无 hover 兜底）：
   `本地执行 {local} · 模型请求 {model} · 思考 {modelRate} token/s（并行时段累计）`。
@@ -140,7 +142,7 @@ turnHeaderRowSchema.workTiming?: {
 
 ### 验收场景
 
-- 运行中的轮：主行显示 `工作中 {duration} · 实时 ≈x.x · 思考 y token/s`；流式生成中实时值变化，停滞/结束后归 0；首轮完成前思考平均为 `—`。
+- 运行中的轮：主行显示 `工作中 {duration} · 实时 ≈x.x · 平均 y · 思考 z token/s`；流式生成中实时值变化，停滞/结束后归 0；平均随会话 tokens/工时累计更新，首轮完成前平均与思考均为 `—`。
 - 完成一轮含工具调用的对话：主行显示 `已工作 X · 整体 Y · 思考 Z token/s`；悬停与展开区显示 `本地执行 A · 模型请求 B · 思考 C token/s（并行时段累计）`。
 - 用户中途取消的轮（resultType:"cancelled"）同样带 workTiming 与双速率。
 - 旧 CLI（payload 无 workTiming）与旧快照（rows 无 workTiming）：UI 回退现状文案，不报错。
