@@ -64,9 +64,9 @@ import type { AssistantWorkRow, ConversationTurnFlowItem } from "@/v4/conversati
 import type { ConversationTurnWorkSegment } from "@/v4/conversationTurnWorkSegments.js";
 import {
   formatConversationWorkDuration,
+  formatConversationWorkedForLabel,
   formatConversationWorkTimingDetail,
 } from "@/v4/conversationWorkDuration.js";
-import { resolveConversationTurnWorkRates } from "@/v4/conversationTurnWorkSegments.js";
 import { normalizeConversationShareMarkdown } from "@/v4/conversationShareMarkdown.js";
 import { resolveToolCallIdentity } from "@/lib/toolIdentity.js";
 import {
@@ -794,22 +794,18 @@ function ReadonlyHistoryStatus({
 }) {
   const { intl } = useZCodeIntl();
   const duration = formatConversationWorkDuration(segment.workStatus?.durationMs, intl, locale);
-  // 与桌面 AssistantHistoryStatus 同款速率/拆分展示（docs/specs/session-token-throughput.md）。
-  const overallRate = resolveConversationTurnWorkRates(segment.workStatus).overallTokensPerSecond;
+  // 与桌面 AssistantHistoryStatus 同款双速率主行（docs/specs/session-token-throughput.md）。
+  const workedLabel =
+    segment.workStatus?.state === "running"
+      ? null
+      : formatConversationWorkedForLabel(segment.workStatus, intl, locale);
   const timingDetail = formatConversationWorkTimingDetail(segment.workStatus, intl, locale);
   const label =
     segment.workStatus?.state === "interrupted"
       ? intl.formatMessage({ id: "chat.history.stopped" })
       : segment.workStatus?.state === "running"
         ? intl.formatMessage({ id: "chat.history.workingFor" }, { duration: duration ?? "" })
-        : duration
-          ? overallRate !== undefined
-            ? intl.formatMessage(
-                { id: "chat.history.workedForWithRate" },
-                { duration, rate: overallRate.toFixed(1) },
-              )
-            : intl.formatMessage({ id: "chat.history.workedFor" }, { duration })
-          : labels.history;
+        : (workedLabel ?? labels.history);
   return (
     <div className="flex w-full flex-col border-b border-border/50 pb-2">
       <CollapsibleTrigger asChild>

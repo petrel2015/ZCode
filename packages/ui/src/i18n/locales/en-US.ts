@@ -4628,9 +4628,16 @@ const enUS: Record<string, string> = {
   "chat.message.retry": "Retry",
   "chat.history.workingFor": "Working for {duration}",
   "chat.history.workedFor": "Worked for {duration}",
-  "chat.history.workedForWithRate": "Worked for {duration} · avg {rate} token/s",
+  "chat.history.workedForWithRate": "Worked for {duration} · overall {rate} token/s",
+  "chat.history.workedForRates":
+    "Worked for {duration} · overall {overall} · thinking {model} token/s",
+  "chat.history.workedForModelRate": "Worked for {duration} · thinking {rate} token/s",
+  "chat.history.runningRates": "Live {live} · thinking {avg} token/s",
+  "chat.history.runningRatesHint":
+    "The thinking average is session-cumulative (generation window, same source as the composer average); it switches to this turn's own data once the turn finishes",
+  "chat.history.ratePending": "—",
   "chat.history.workTimingDetail":
-    "Local execution {local} · model requests {model} · model-phase {modelRate} token/s (parallel time counted cumulatively)",
+    "Local execution {local} · model requests {model} · thinking {modelRate} token/s (parallel time counted cumulatively)",
   "chat.history.workTimingBreakdown":
     "Local execution {local} · model requests {model} (parallel time counted cumulatively)",
   "chat.history.worked": "Worked",
