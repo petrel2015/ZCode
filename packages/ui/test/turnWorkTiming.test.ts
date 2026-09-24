@@ -5,6 +5,7 @@ import { formatConversationWorkedForLabel } from "../src/v4/conversationWorkDura
 import {
   buildConversationTurnWorkSegments,
   resolveConversationTurnWorkRates,
+  resolveSessionAverageTokensPerSecond,
   type ConversationTurnWorkStatus,
 } from "../src/v4/conversationTurnWorkSegments.js";
 
@@ -203,4 +204,44 @@ test("rates integration from a parsed header through workStatus", () => {
   // 27600 tokens / 61s ≈ 452.5；/ 10s = 2760。
   assert.ok(Math.abs((rates.overallTokensPerSecond ?? 0) - 452.46) < 0.1);
   assert.equal(rates.modelTokensPerSecond, 2760);
+});
+
+test("resolveSessionAverageTokensPerSecond spans conversation active time", () => {
+  // 「自会话开始到现在」：已完成轮 activeMs 之和 + 当前运行轮已进行时长。
+  // 27k tokens ÷ (50s 已完成 + 40s 运行中) = 300 token/s。
+  assert.equal(
+    resolveSessionAverageTokensPerSecond({
+      cumulativeOutputTokens: 27_000,
+      completedActiveMs: 50_000,
+      runningDurationMs: 40_000,
+    }),
+    300,
+  );
+  // 首轮（无已完成轮、运行刚开始）或缺任一事实 → null（显示 —，不是 0）。
+  assert.equal(
+    resolveSessionAverageTokensPerSecond({
+      cumulativeOutputTokens: 0,
+      completedActiveMs: 0,
+      runningDurationMs: 5_000,
+    }),
+    null,
+  );
+  assert.equal(
+    resolveSessionAverageTokensPerSecond({
+      cumulativeOutputTokens: 1_000,
+      completedActiveMs: 0,
+      runningDurationMs: 0,
+    }),
+    null,
+  );
+  assert.equal(resolveSessionAverageTokensPerSecond({}), null);
+  // 运行时长为负（时钟回拨防护）按 0 处理，不产生负分母。
+  assert.equal(
+    resolveSessionAverageTokensPerSecond({
+      cumulativeOutputTokens: 1_000,
+      completedActiveMs: 10_000,
+      runningDurationMs: -3_000,
+    }),
+    100,
+  );
 });

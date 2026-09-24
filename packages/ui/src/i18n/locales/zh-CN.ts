@@ -4333,9 +4333,9 @@ const zhCN: Record<string, string> = {
   "chat.history.workedForWithRate": "已工作 {duration} · 整体 {rate} token/s",
   "chat.history.workedForRates": "已工作 {duration} · 整体 {overall} · 思考 {model} token/s",
   "chat.history.workedForModelRate": "已工作 {duration} · 思考 {rate} token/s",
-  "chat.history.runningRates": "实时 {live} · 思考 {avg} token/s",
+  "chat.history.runningRates": "实时 {live} · 平均 {avg} · 思考 {think} token/s",
   "chat.history.runningRatesHint":
-    "思考平均为会话累计（生成时段口径，与输入框「平均」同源）；本轮结束后切换为本轮数据",
+    "平均为自会话开始的活跃工时口径（排除输入等待）；思考为会话累计生成时段口径（与输入框「平均」同源）。本轮结束后均切换为本轮数据",
   "chat.history.ratePending": "—",
   "chat.history.workTimingDetail":
     "本地执行 {local} · 模型请求 {model} · 思考 {modelRate} token/s（并行时段累计）",

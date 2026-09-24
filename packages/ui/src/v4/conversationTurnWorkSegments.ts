@@ -97,6 +97,23 @@ export function resolveConversationTurnWorkRates(
   };
 }
 
+/**
+ * 运行中的会话整体平均（spec 第三版）：会话累计 outputTokens ÷（已完成轮 activeMs
+ * 之和 + 当前运行轮已进行时长）。与完成后「整体」同口径（排除用户输入等待），跨轮
+ * 累计——「自这个对话开始到现在」的平均。completedActiveMs 只统计 rows 窗口内的
+ * 轮头，超长会话的更早轮不在窗口内时为近似值。缺任一事实返回 null（显示 —）。
+ */
+export function resolveSessionAverageTokensPerSecond(input: {
+  cumulativeOutputTokens?: number;
+  completedActiveMs?: number;
+  runningDurationMs?: number;
+}): number | null {
+  const tokens = input.cumulativeOutputTokens ?? 0;
+  const denominator = (input.completedActiveMs ?? 0) + Math.max(input.runningDurationMs ?? 0, 0);
+  if (tokens <= 0 || denominator <= 0) return null;
+  return (tokens * 1000) / denominator;
+}
+
 interface DraftVisualWorkSegment {
   orderedRows: ConversationRow[];
   triggerRow?: UserInputRow;
