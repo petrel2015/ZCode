@@ -1,6 +1,16 @@
 /* eslint-disable max-lines -- turn group 需要在同一处维护普通 assistant 与后台结果的严格行序，拆分会重复 actions/preview/tail 协议。 */
 import { useIsOfficeMode } from "@/hooks/useInterfaceMode.js";
-import { Fragment, memo, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  Fragment,
+  createContext,
+  memo,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { ChevronRightIcon } from "lucide-react";
 import {
   TID_CHAT_ASSISTANT_HISTORY_CONTENT,
@@ -85,9 +95,11 @@ import type {
 } from "@/v4/conversationTurnRenderUnits.js";
 import {
   formatConversationWorkDuration,
+  formatConversationWorkedForLabel,
   formatConversationWorkTimingDetail,
 } from "@/v4/conversationWorkDuration.js";
-import { resolveConversationTurnWorkRates } from "@/v4/conversationTurnWorkSegments.js";
+import { formatTokenRateReadings } from "@/v4/streamingTokenRate.js";
+import { useStreamingRowTokenRate } from "@/v4/useStreamingTokenRate.js";
 import { ConversationTurnRow, resolveAssistantCopyText } from "@/v4/ConversationTurnRow.js";
 import { ConversationHookDetailsAction } from "@/v4/ConversationHookDetailsAction.js";
 import { toolCallRowToLegacyNode } from "@/v4/toolCallRowAdapter.js";
@@ -127,6 +139,14 @@ interface OffPeakTurnCard {
 }
 
 const MIN_VISIBLE_API_RETRY_ATTEMPT = 3;
+
+/**
+ * 运行中轮的「思考平均」（会话累计生成时段口径，即 usage.throughput.avgTokensPerSecond，
+ * 与 composer「平均」同源同值）。由 SessionPane 在 Timeline 外层注入；context 更新可穿透
+ * memo 只重渲染状态行，不给 Timeline 增加高频 prop。轮结束后状态行切换为本轮权威
+ * workTiming 派生数据，不再读该值（运行中尚无本轮事实，详见 spec 第三版）。
+ */
+export const ConversationRunningWorkRateContext = createContext<number | null>(null);
 
 function toRetryStatus(apiRetry: ApiRetryState): ZCodeApiRetryStatus {
   const attempt = Math.max(1, Math.floor(apiRetry.attempt));
@@ -566,6 +586,24 @@ function OffPeakTurnCards({
   );
 }
 
+// 运行中轮的实时读数：独立子组件承载 500ms 采样状态，只重渲染本行不波及时间线。
+// 「思考」平均来自会话累计生成口径（Context 注入）；本轮结束后由父级切换为本轮权威数据。
+function RunningTurnLiveRate({ rows }: { rows: readonly AssistantWorkRow[] }) {
+  const { intl } = useZCodeIntl();
+  const live = useStreamingRowTokenRate(rows);
+  const modelAvg = useContext(ConversationRunningWorkRateContext);
+  const liveLabel = formatTokenRateReadings(live, null).live;
+  const avgLabel =
+    modelAvg !== null && modelAvg !== undefined && modelAvg > 0
+      ? modelAvg.toFixed(1)
+      : intl.formatMessage({ id: "chat.history.ratePending" });
+  return (
+    <span className="truncate">
+      {intl.formatMessage({ id: "chat.history.runningRates" }, { live: liveLabel, avg: avgLabel })}
+    </span>
+  );
+}
+
 function AssistantHistoryStatus({
   segment,
   open,
@@ -579,23 +617,22 @@ function AssistantHistoryStatus({
     intl,
     locale,
   );
-  // 轮级速率（docs/specs/session-token-throughput.md）：整体速率进主行，拆分进
-  // 悬停 title；展开区常显一行明细作为触屏/无 hover 的兜底。缺事实时回退现状文案。
-  const overallRate = resolveConversationTurnWorkRates(segment.workStatus).overallTokensPerSecond;
+  const isRunning = segment.workStatus?.state === "running";
+  // 完成后主行直接写双速率（整体 + 思考），拆分明细保留在悬停/展开区
+  // （docs/specs/session-token-throughput.md 第三版）。
+  const workedLabel = isRunning
+    ? null
+    : formatConversationWorkedForLabel(segment.workStatus, intl, locale);
   const timingDetail = formatConversationWorkTimingDetail(segment.workStatus, intl, locale);
   const label =
     segment.workStatus?.state === "interrupted"
       ? intl.formatMessage({ id: "chat.history.stopped" })
-      : segment.workStatus?.state === "running"
+      : isRunning
         ? intl.formatMessage({ id: "chat.history.workingFor" }, { duration: durationLabel ?? "" })
-        : durationLabel
-          ? overallRate !== undefined
-            ? intl.formatMessage(
-                { id: "chat.history.workedForWithRate" },
-                { duration: durationLabel, rate: overallRate.toFixed(1) },
-              )
-            : intl.formatMessage({ id: "chat.history.workedFor" }, { duration: durationLabel })
-          : intl.formatMessage({ id: "chat.history.worked" });
+        : (workedLabel ?? intl.formatMessage({ id: "chat.history.worked" }));
+  const runningTitle = isRunning
+    ? intl.formatMessage({ id: "chat.history.runningRatesHint" })
+    : null;
 
   return (
     <div className="flex w-full flex-col border-b border-[var(--color-border)]/50 pb-2">
@@ -604,10 +641,11 @@ function AssistantHistoryStatus({
           type="button"
           data-testid={testId(TID_CHAT_ASSISTANT_HISTORY_TRIGGER, segment.key)}
           data-history-open={String(open)}
-          title={timingDetail ?? undefined}
+          title={timingDetail ?? runningTitle ?? undefined}
           className="group/history-message inline-flex max-w-full items-center gap-2 text-left text-ui-base text-foreground-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-input-border-focused)]"
         >
           <span className="truncate">{label}</span>
+          {isRunning ? <RunningTurnLiveRate rows={segment.assistantWorkRows} /> : null}
           {!segment.assistantHistoryDefaultOpen ? (
             <ChevronRightIcon
               aria-hidden
