@@ -39,6 +39,7 @@ import type {
   TurnCompletePayload,
   TurnErrorPayload,
   TurnInputIntentMetadata,
+  TurnWorkTiming,
   TurnSteerDispatchChangedPayload,
   TurnSteerDiscardedPayload,
   TurnSteerDeliveryChangedPayload,
@@ -2209,6 +2210,9 @@ export class ProductProjection {
         headerState,
         this.activeMsForCompletion(event, payload.duration),
         payload.historyRoundCount,
+        // 整轮口径的工时拆分随终态一次性写入；splitProductTurn 切段不拆分它
+        //（guide 分段不细分，见 docs/specs/session-token-throughput.md）。
+        payload.workTiming,
       ),
       ...(payload.resultType === "success" ? this.markStableForkAssistant(event) : []),
       {
@@ -5097,6 +5101,7 @@ export class ProductProjection {
     state: "completedSuccess" | "completedInterrupted" | "failed",
     activeMs?: number,
     historyRoundCount?: number,
+    workTiming?: TurnWorkTiming,
   ): ConversationDelta[] {
     const row = this.turnHeaderForEvent(event);
     if (!row) return [];
@@ -5110,6 +5115,7 @@ export class ProductProjection {
           endedAt,
           ...(activeMs !== undefined ? { activeMs } : {}),
           ...(historyRoundCount !== undefined ? { historyRoundCount } : {}),
+          ...(workTiming !== undefined ? { workTiming } : {}),
           ...(row.workSegments
             ? {
                 workSegments: this.completeWorkSegments(row.workSegments, endedAt),

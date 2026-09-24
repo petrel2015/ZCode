@@ -14,6 +14,19 @@ import type { AssistantWorkRow, ConversationTurnFlowItem } from "@/v4/conversati
 export interface ConversationTurnWorkStatus {
   state: "running" | "completed" | "interrupted";
   durationMs?: number;
+  /**
+   * 轮级工时拆分（docs/specs/session-token-throughput.md）：整轮口径，只在单段轮
+   * （无 guide 切段）透传；多段轮把整轮时长错配到分段会得出错误速率。
+   */
+  workTiming?: NonNullable<TurnHeaderRow["workTiming"]>;
+}
+
+/** 轮级速率派生结果；undefined 字段表示缺事实，UI 不显示（不显示 0）。 */
+export interface ConversationTurnWorkRates {
+  /** 整体速率 = 轮 outputTokens ÷ 权威工时 activeMs。 */
+  overallTokensPerSecond?: number;
+  /** 模型期速率 = 轮 outputTokens ÷ Σ 模型请求 wall 时长（含首 token 等待）。 */
+  modelTokensPerSecond?: number;
 }
 
 export interface ConversationTurnWorkSegment {
@@ -60,6 +73,28 @@ export function resolveConversationTurnWorkDurationMs(
     return Math.max(options.nowMs - header.startedAt, 0);
   }
   return undefined;
+}
+
+/**
+ * 速率派生（docs/specs/session-token-throughput.md「轮级工时拆分」）：
+ * 整体 = outputTokens ÷ activeMs，模型期 = outputTokens ÷ Σ 模型请求 wall 时长。
+ * 运行中轮没有 workTiming 事实；任一时长为 0 或缺 tokens 时对应速率缺省——
+ * 显示 0 会误导为“零产出”，缺省让 UI 回退现状文案。
+ */
+export function resolveConversationTurnWorkRates(
+  workStatus: ConversationTurnWorkStatus | undefined,
+): ConversationTurnWorkRates {
+  const timing = workStatus?.workTiming;
+  if (!workStatus || !timing || workStatus.state === "running") return {};
+  const outputTokens = timing.outputTokens;
+  if (outputTokens === undefined || outputTokens <= 0) return {};
+  const durationMs = workStatus.durationMs ?? 0;
+  return {
+    ...(durationMs > 0 ? { overallTokensPerSecond: (outputTokens * 1000) / durationMs } : {}),
+    ...(timing.modelRequestMs > 0
+      ? { modelTokensPerSecond: (outputTokens * 1000) / timing.modelRequestMs }
+      : {}),
+  };
 }
 
 interface DraftVisualWorkSegment {
@@ -181,13 +216,19 @@ export function buildConversationTurnWorkSegments(options: {
       segmentCount: visualDrafts.length,
       nowMs: options.nowMs,
     });
-    const segmentWorkStatus = resolveConversationTurnWorkStatus(
+    const segmentWorkStatusBase = resolveConversationTurnWorkStatus(
       options.header,
       segmentFlowRows,
       segmentRunning,
       segmentDurationMs,
       options.isInterrupted && segmentIndex === visualDrafts.length - 1,
     );
+    // workTiming 是整轮口径：只有单段轮（无 guide 切段）才透传给视觉段；
+    // 多段轮的分段时长配整轮拆分会得出错误速率，宁可缺省回退现状文案。
+    const segmentWorkStatus =
+      segmentWorkStatusBase && visualDrafts.length === 1 && options.header?.workTiming
+        ? { ...segmentWorkStatusBase, workTiming: options.header.workTiming }
+        : segmentWorkStatusBase;
     const segmentKey =
       segmentIndex === 0
         ? options.key

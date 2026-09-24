@@ -986,6 +986,8 @@ export interface AppUsageQueryInput {
   until: number;
   /** 调用端时区相对 UTC 的固定偏移（ms），用于按本地日归桶。 */
   tzOffsetMs: number;
+  /** 可选：请求该本地日期（yyyy-mm-dd）的 24 小时速率桶（docs/specs/usage-stats-app-usage.md）。 */
+  hourlyDate?: string;
 }
 
 export interface AppUsageTotalsRow {
@@ -1040,6 +1042,27 @@ export interface AppUsageDayModelRow {
   totalTokens: number;
 }
 
+/** 按天速率事实（来自 usage_rollup_hourly，永久保留；docs/specs/usage-stats-app-usage.md）。 */
+export interface AppUsageRateDayRow {
+  dayIndex: number;
+  outputTokens: number;
+  /** Σ(completed_at − first_token_at)，速率分母（生成口径）。 */
+  generationMs: number;
+  /** Σ 模型请求 wall 时长（含首 token 等待，累计口径）。 */
+  modelRequestMs: number;
+  /** Σ 工具执行时长（并行重复计入）。 */
+  toolExecutionMs: number;
+}
+
+/** 所选日本地 0-23 点的速率事实。 */
+export interface AppUsageRateHourRow {
+  hour: number;
+  outputTokens: number;
+  generationMs: number;
+  modelRequestMs: number;
+  toolExecutionMs: number;
+}
+
 export interface AppUsageQueryResult {
   totals: AppUsageTotalsRow;
   turnTotals: AppUsageTurnTotalsRow;
@@ -1048,6 +1071,10 @@ export interface AppUsageQueryResult {
   tools: AppUsageToolRow[];
   days: AppUsageDayRow[];
   dayModels: AppUsageDayModelRow[];
+  /** 速率趋势的按天事实（范围与 since/until 一致）。 */
+  rateDays: AppUsageRateDayRow[];
+  /** 仅当输入 hourlyDate 给定时返回该日 24 桶；缺省不请求。 */
+  rateHours?: AppUsageRateHourRow[];
 }
 
 export interface TaskUsageQueryInput {

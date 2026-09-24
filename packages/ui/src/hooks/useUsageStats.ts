@@ -22,7 +22,7 @@ function getErrorMessage(error: unknown): string {
   return String(error);
 }
 
-export function useAppUsageStats(range: AppUsageRange) {
+export function useAppUsageStats(range: AppUsageRange, hourlyDate?: string) {
   const { zcodeAgentService } = useServices();
   const [state, setState] = useState<AppUsageStatsState>({
     snapshot: null,
@@ -43,9 +43,11 @@ export function useAppUsageStats(range: AppUsageRange) {
     try {
       // App Usage 只聚合本地 session 库的真实统计，经 zcodeAgentService →
       // v4 usage/stats → CLI usage store 读取；不经过任何平台 monitor API。
+      // hourlyDate 仅请求该日的 24 小时速率桶（docs/specs/usage-stats-app-usage.md）。
       const snapshot = await zcodeAgentService.getAppUsageStats({
         range,
         timeZone,
+        ...(hourlyDate ? { hourlyDate } : {}),
       });
       if (requestVersionRef.current !== requestVersion) {
         return;
@@ -67,7 +69,7 @@ export function useAppUsageStats(range: AppUsageRange) {
         error: message,
       }));
     }
-  }, [range, zcodeAgentService]);
+  }, [range, hourlyDate, zcodeAgentService]);
 
   useEffect(() => {
     void refresh();

@@ -743,6 +743,11 @@ export const v4UsageStatsParamsSchema = z
   .object({
     range: z.enum(APP_USAGE_RANGES),
     timeZone: z.string().optional(),
+    // additive：请求所选本地日的 24 小时速率桶（docs/specs/usage-stats-app-usage.md）。
+    hourlyDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional(),
   })
   .strict();
 export type V4UsageStatsParams = z.infer<typeof v4UsageStatsParamsSchema>;
