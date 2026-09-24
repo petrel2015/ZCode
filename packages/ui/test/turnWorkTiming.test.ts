@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { turnHeaderRowSchema } from "../../shared/src/zcode-protocol-v4/rows.js";
+import { formatConversationWorkedForLabel } from "../src/v4/conversationWorkDuration.js";
 import {
   buildConversationTurnWorkSegments,
   resolveConversationTurnWorkRates,
@@ -8,6 +9,57 @@ import {
 } from "../src/v4/conversationTurnWorkSegments.js";
 
 const timing = { modelRequestMs: 600_000, toolExecutionMs: 3_000_000, outputTokens: 36_000 };
+
+// 最小 intl 桩：时长单位翻译为中文单字，其余返回 "id|插值"，足以断言分支与参数。
+const stubIntl = {
+  formatMessage: ({ id }: { id: string }, values?: Record<string, string>) => {
+    if (id === "chat.history.duration.day") return "天";
+    if (id === "chat.history.duration.hour") return "时";
+    if (id === "chat.history.duration.minute") return "分";
+    if (id === "chat.history.duration.second") return "秒";
+    return `${id}|${Object.values(values ?? {}).join(",")}`;
+  },
+} as unknown as Parameters<typeof formatConversationWorkedForLabel>[1];
+
+test("formatConversationWorkedForLabel keeps both rates on the main line", () => {
+  const label = formatConversationWorkedForLabel(
+    { state: "completed", durationMs: 3_600_000, workTiming: timing },
+    stubIntl,
+    "zh-CN",
+  );
+  // 双速率常驻主行（整体 + 思考），不藏悬停。
+  assert.equal(label, "chat.history.workedForRates|1 时,10.0,60.0");
+});
+
+test("formatConversationWorkedForLabel degrades to single rate or duration only", () => {
+  // 仅整体（模型请求时长为 0）：
+  const overallOnly = formatConversationWorkedForLabel(
+    {
+      state: "completed",
+      durationMs: 1000,
+      workTiming: { modelRequestMs: 0, toolExecutionMs: 0, outputTokens: 100 },
+    },
+    stubIntl,
+    "zh-CN",
+  );
+  assert.equal(overallOnly, "chat.history.workedForWithRate|1 秒,100.0");
+  // 仅思考（activeMs 为 0 → 整体速率缺省；duration 格式化按最小 1 秒展示）：
+  const modelOnly = formatConversationWorkedForLabel(
+    { state: "completed", durationMs: 0, workTiming: timing },
+    stubIntl,
+    "zh-CN",
+  );
+  assert.equal(modelOnly, "chat.history.workedForModelRate|1 秒,60.0");
+  // 无 workTiming：退回纯时长文案。
+  const durationOnly = formatConversationWorkedForLabel(
+    { state: "completed", durationMs: 5000 },
+    stubIntl,
+    "zh-CN",
+  );
+  assert.equal(durationOnly, "chat.history.workedFor|5 秒");
+  // 无时长事实：返回 null，由调用方回退「已处理」。
+  assert.equal(formatConversationWorkedForLabel(undefined, stubIntl, "zh-CN"), null);
+});
 
 test("resolveConversationTurnWorkRates derives overall and model-phase rates", () => {
   // 1 小时权威工时产出 36k tokens → 整体 10 token/s；10 分钟模型请求 → 模型期 60 token/s。

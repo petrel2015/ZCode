@@ -4330,9 +4330,15 @@ const zhCN: Record<string, string> = {
   "chat.message.retry": "重试",
   "chat.history.workingFor": "工作中 {duration}",
   "chat.history.workedFor": "已工作 {duration}",
-  "chat.history.workedForWithRate": "已工作 {duration} · 平均 {rate} token/s",
+  "chat.history.workedForWithRate": "已工作 {duration} · 整体 {rate} token/s",
+  "chat.history.workedForRates": "已工作 {duration} · 整体 {overall} · 思考 {model} token/s",
+  "chat.history.workedForModelRate": "已工作 {duration} · 思考 {rate} token/s",
+  "chat.history.runningRates": "实时 {live} · 思考 {avg} token/s",
+  "chat.history.runningRatesHint":
+    "思考平均为会话累计（生成时段口径，与输入框「平均」同源）；本轮结束后切换为本轮数据",
+  "chat.history.ratePending": "—",
   "chat.history.workTimingDetail":
-    "本地执行 {local} · 模型请求 {model} · 模型期 {modelRate} token/s（并行时段累计）",
+    "本地执行 {local} · 模型请求 {model} · 思考 {modelRate} token/s（并行时段累计）",
   "chat.history.workTimingBreakdown": "本地执行 {local} · 模型请求 {model}（并行时段累计）",
   "chat.history.worked": "已处理",
   "chat.history.stopped": "已停止",
