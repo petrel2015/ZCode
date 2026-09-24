@@ -98,6 +98,7 @@ import {
   formatConversationWorkedForLabel,
   formatConversationWorkTimingDetail,
 } from "@/v4/conversationWorkDuration.js";
+import { resolveSessionAverageTokensPerSecond } from "@/v4/conversationTurnWorkSegments.js";
 import { formatTokenRateReadings } from "@/v4/streamingTokenRate.js";
 import { useStreamingRowTokenRate } from "@/v4/useStreamingTokenRate.js";
 import { ConversationTurnRow, resolveAssistantCopyText } from "@/v4/ConversationTurnRow.js";
@@ -141,12 +142,23 @@ interface OffPeakTurnCard {
 const MIN_VISIBLE_API_RETRY_ATTEMPT = 3;
 
 /**
- * 运行中轮的「思考平均」（会话累计生成时段口径，即 usage.throughput.avgTokensPerSecond，
- * 与 composer「平均」同源同值）。由 SessionPane 在 Timeline 外层注入；context 更新可穿透
- * memo 只重渲染状态行，不给 Timeline 增加高频 prop。轮结束后状态行切换为本轮权威
- * workTiming 派生数据，不再读该值（运行中尚无本轮事实，详见 spec 第三版）。
+ * 运行中轮的会话级速率事实（由 SessionPane 在 Timeline 外层注入；context 更新可穿透
+ * memo 只重渲染状态行，不给 Timeline 增加高频 prop）：
+ * - modelAvgTokensPerSecond：思考平均（会话累计生成时段口径，与 composer「平均」同源）。
+ * - cumulativeOutputTokens / completedActiveMs：整体平均的分子分母——会话累计 output
+ *   tokens 与已完成轮 activeMs 之和（当前运行轮的已进行时长由状态行每秒跳动的
+ *   durationMs 补上）。completedActiveMs 只统计 rows 窗口内的轮头，超长会话的更早
+ *   轮不在窗口内时为近似值。轮结束后状态行切换为本轮权威 workTiming 派生数据，
+ *   不再读该 context（详见 spec 第三版）。
  */
-export const ConversationRunningWorkRateContext = createContext<number | null>(null);
+export interface ConversationRunningWorkRateFacts {
+  modelAvgTokensPerSecond: number | null;
+  cumulativeOutputTokens: number;
+  completedActiveMs: number;
+}
+
+export const ConversationRunningWorkRateContext =
+  createContext<ConversationRunningWorkRateFacts | null>(null);
 
 function toRetryStatus(apiRetry: ApiRetryState): ZCodeApiRetryStatus {
   const attempt = Math.max(1, Math.floor(apiRetry.attempt));
@@ -586,20 +598,45 @@ function OffPeakTurnCards({
   );
 }
 
+// 单个平均读数：null/0 →「—」（缺事实，不误导为 0），>0 → 一位小数。
+function formatRateReading(
+  value: number | null,
+  intl: ReturnType<typeof useZCodeIntl>["intl"],
+): string {
+  return value !== null && value > 0
+    ? value.toFixed(1)
+    : intl.formatMessage({ id: "chat.history.ratePending" });
+}
+
 // 运行中轮的实时读数：独立子组件承载 500ms 采样状态，只重渲染本行不波及时间线。
-// 「思考」平均来自会话累计生成口径（Context 注入）；本轮结束后由父级切换为本轮权威数据。
-function RunningTurnLiveRate({ rows }: { rows: readonly AssistantWorkRow[] }) {
+// 「平均」= 自会话开始的活跃工时平均（tokens ÷ 已完成轮 activeMs + 本轮已进行时长），
+// 与完成后「整体」同口径；「思考」= 会话累计生成时段平均。本轮结束后由父级切换为本轮权威数据。
+function RunningTurnLiveRate({
+  rows,
+  runningDurationMs,
+}: {
+  rows: readonly AssistantWorkRow[];
+  runningDurationMs: number | undefined;
+}) {
   const { intl } = useZCodeIntl();
   const live = useStreamingRowTokenRate(rows);
-  const modelAvg = useContext(ConversationRunningWorkRateContext);
+  const facts = useContext(ConversationRunningWorkRateContext);
   const liveLabel = formatTokenRateReadings(live, null).live;
-  const avgLabel =
-    modelAvg !== null && modelAvg !== undefined && modelAvg > 0
-      ? modelAvg.toFixed(1)
-      : intl.formatMessage({ id: "chat.history.ratePending" });
+  const avgLabel = formatRateReading(
+    resolveSessionAverageTokensPerSecond({
+      cumulativeOutputTokens: facts?.cumulativeOutputTokens,
+      completedActiveMs: facts?.completedActiveMs,
+      runningDurationMs,
+    }),
+    intl,
+  );
+  const thinkLabel = formatRateReading(facts?.modelAvgTokensPerSecond ?? null, intl);
   return (
     <span className="truncate">
-      {intl.formatMessage({ id: "chat.history.runningRates" }, { live: liveLabel, avg: avgLabel })}
+      {intl.formatMessage(
+        { id: "chat.history.runningRates" },
+        { live: liveLabel, avg: avgLabel, think: thinkLabel },
+      )}
     </span>
   );
 }
@@ -645,7 +682,12 @@ function AssistantHistoryStatus({
           className="group/history-message inline-flex max-w-full items-center gap-2 text-left text-ui-base text-foreground-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-input-border-focused)]"
         >
           <span className="truncate">{label}</span>
-          {isRunning ? <RunningTurnLiveRate rows={segment.assistantWorkRows} /> : null}
+          {isRunning ? (
+            <RunningTurnLiveRate
+              rows={segment.assistantWorkRows}
+              runningDurationMs={segment.workStatus?.durationMs}
+            />
+          ) : null}
           {!segment.assistantHistoryDefaultOpen ? (
             <ChevronRightIcon
               aria-hidden

@@ -4632,9 +4632,9 @@ const enUS: Record<string, string> = {
   "chat.history.workedForRates":
     "Worked for {duration} · overall {overall} · thinking {model} token/s",
   "chat.history.workedForModelRate": "Worked for {duration} · thinking {rate} token/s",
-  "chat.history.runningRates": "Live {live} · thinking {avg} token/s",
+  "chat.history.runningRates": "Live {live} · avg {avg} · thinking {think} token/s",
   "chat.history.runningRatesHint":
-    "The thinking average is session-cumulative (generation window, same source as the composer average); it switches to this turn's own data once the turn finishes",
+    "The average uses active work time since the conversation started (input waits excluded); the thinking average is session-cumulative over generation windows (same source as the composer average). Both switch to this turn's own data once the turn finishes",
   "chat.history.ratePending": "—",
   "chat.history.workTimingDetail":
     "Local execution {local} · model requests {model} · thinking {modelRate} token/s (parallel time counted cumulatively)",
