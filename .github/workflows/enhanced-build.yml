@@ -1,0 +1,83 @@
+# enhanced 分支手动构建验证（agent-queue #16 交付验证用）。
+#
+# 与 nightly.yml 同模式：workflow 文件存于默认分支 main（workflow_dispatch 的要求），
+# 构建内容通过 checkout 的 ref 指向 enhanced 分支——enhanced 分支本身不携带任何
+# CI workflow 文件（issue #16「不要做」：不引入 CI nightly 提交内容）。
+# 只构建 mac-arm64 并产出 SHA256SUMS artifact，用于与本地构建做 hash 对比；
+# 不创建 release、不触碰 nightly-<date> 发布链。
+name: Enhanced Branch Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "要构建的 enhanced 分支 ref"
+        required: false
+        default: "enhanced"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: enhanced-build
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  ZCODE_ENV: production
+  ZCODE_SKIP_REMOTE_ASSETS: "1"
+
+jobs:
+  build:
+    name: bundle mac-arm64
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout enhanced branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || 'enhanced' }}
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.14.0
+          cache: pnpm
+
+      - name: Cache Electron binaries
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+          key: electron-mac-arm64-v1
+          restore-keys: electron-mac-arm64-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Bundle desktop app
+        run: pnpm bundle:desktop -- --os mac --arch arm64
+
+      - name: Generate checksums
+        run: |
+          cd packages/desktop/dist
+          shasum -a 256 *.dmg *.zip > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: enhanced-mac-arm64
+          path: |
+            packages/desktop/dist/*.dmg
+            packages/desktop/dist/*.zip
+            packages/desktop/dist/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 7
