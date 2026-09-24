@@ -25,6 +25,11 @@ const AppUsageDailyModelTrendChart = lazy(() =>
     default: module.AppUsageDailyModelTrendChart,
   })),
 );
+const AppUsageRateTrendChart = lazy(() =>
+  import("@/settings/usage-stats/AppUsageRateTrendChart.js").then((module) => ({
+    default: module.AppUsageRateTrendChart,
+  })),
+);
 const AppUsageModelUsagePieChart = lazy(() =>
   import("@/settings/usage-stats/AppUsageModelUsagePieChart.js").then((module) => ({
     default: module.AppUsageModelUsagePieChart,
@@ -34,6 +39,8 @@ const AppUsageModelUsagePieChart = lazy(() =>
 export function AppUsagePanel() {
   const { intl, locale } = useZCodeIntl();
   const [range, setRange] = useState<AppUsageRange>("7d");
+  // 刷新令牌：让速率趋势图内部的小时查询随手动刷新联动。
+  const [refreshToken, setRefreshToken] = useState(0);
   const { snapshot: lifetimeSnapshot, refresh: refreshLifetime } = useAppUsageStats("all");
   const { snapshot, loading, error, refresh } = useAppUsageStats(range);
 
@@ -103,6 +110,19 @@ export function AppUsagePanel() {
         <AppUsageDailyModelTrendChart snapshot={snapshot} />
       </UsageChartLoadBoundary>
       <UsageChartLoadBoundary
+        scope="settings.usage.app-rate-trend-chart"
+        resetKeys={[snapshot.range, snapshot.generatedAt, "rate-trend", refreshToken]}
+        loadingDescription={intl.formatMessage({
+          id: "settings.usage.appUsageLoadingDescription",
+        })}
+      >
+        <AppUsageRateTrendChart
+          snapshot={snapshot}
+          lifetimeSnapshot={lifetimeSnapshot}
+          refreshToken={refreshToken}
+        />
+      </UsageChartLoadBoundary>
+      <UsageChartLoadBoundary
         scope="settings.usage.app-model-pie-chart"
         resetKeys={[snapshot.range, snapshot.generatedAt, "model-pie"]}
         loadingDescription={intl.formatMessage({
@@ -119,6 +139,7 @@ export function AppUsagePanel() {
           size="sm"
           className="h-8 rounded-md bg-background"
           onClick={() => {
+            setRefreshToken((token) => token + 1);
             void Promise.all([refresh(), refreshLifetime()]);
           }}
         >

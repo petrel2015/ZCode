@@ -1,5 +1,9 @@
 import type { Locale } from "@zcode/shared";
 import type { IntlInstance } from "@/i18n/IntlProvider.js";
+import {
+  resolveConversationTurnWorkRates,
+  type ConversationTurnWorkStatus,
+} from "@/v4/conversationTurnWorkSegments.js";
 
 function formatDurationUnit(
   value: number,
@@ -36,4 +40,35 @@ export function formatConversationWorkDuration(
   }
 
   return parts.slice(0, 2).join(" ");
+}
+
+// 拆分明细里的 0 必须如实显示为「0 秒」；formatConversationWorkDuration 会把 0
+// 取整成 1 秒（它服务于“已工作”观感），直接复用会把空侧误报成有耗时。
+function formatTimingDuration(durationMs: number, intl: IntlInstance, locale: Locale): string {
+  if (durationMs > 0) return formatConversationWorkDuration(durationMs, intl, locale) ?? "";
+  return formatDurationUnit(0, "chat.history.duration.second", intl, locale);
+}
+
+/**
+ * 轮级工时拆分明细文案（docs/specs/session-token-throughput.md「轮级工时拆分」）：
+ * 本地执行 / 模型请求时长 + 模型期速率。无 workTiming 或两侧都缺事实时返回 null，
+ * UI 回退现状文案。Desktop 悬停 title、展开区常显行与 Share 只读时间线共用。
+ */
+export function formatConversationWorkTimingDetail(
+  workStatus: ConversationTurnWorkStatus | undefined,
+  intl: IntlInstance,
+  locale: Locale,
+): string | null {
+  const timing = workStatus?.workTiming;
+  if (!timing) return null;
+  const rates = resolveConversationTurnWorkRates(workStatus);
+  const local = formatTimingDuration(timing.toolExecutionMs, intl, locale);
+  const model = formatTimingDuration(timing.modelRequestMs, intl, locale);
+  if (rates.modelTokensPerSecond !== undefined) {
+    return intl.formatMessage(
+      { id: "chat.history.workTimingDetail" },
+      { local, model, modelRate: rates.modelTokensPerSecond.toFixed(1) },
+    );
+  }
+  return intl.formatMessage({ id: "chat.history.workTimingBreakdown" }, { local, model });
 }

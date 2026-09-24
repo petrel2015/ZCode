@@ -5,6 +5,8 @@ import type {
   AppUsageModelRow,
   AppUsageQueryInput,
   AppUsageQueryResult,
+  AppUsageRateDayRow,
+  AppUsageRateHourRow,
   AppUsageToolRow,
   TaskUsageQueryInput,
   TaskUsageQueryResult,
@@ -16,6 +18,198 @@ import { encodeJson } from "../json.js";
 
 const USAGE_RETENTION_DAYS = 30;
 const USAGE_RETENTION_MS = USAGE_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+
+const HOUR_MS = 3_600_000;
+// 活动窗口：窗口内明细可能 upsert 更新（工具/轮完成晚于开始），每次查询整段重建；
+// 窗口外的明细不再变化（请求/工具不会跨越 48h），按 watermark 一次性冻结进 rollup。
+const ROLLUP_LIVE_WINDOW_HOURS = 48;
+
+interface RollupHourRow {
+  hourIndex: number;
+  outputTokens: number;
+  totalTokens: number;
+  generationMs: number;
+  modelRequestMs: number;
+  toolExecutionMs: number;
+  modelRequestCount: number;
+  toolCallCount: number;
+  turnCount: number;
+}
+
+interface RollupMergeInput {
+  outputTokens?: number;
+  totalTokens?: number;
+  generationMs?: number;
+  modelRequestMs?: number;
+  toolExecutionMs?: number;
+  modelRequestCount?: number;
+  toolCallCount?: number;
+  turnCount?: number;
+}
+
+function mergeRollupHour(target: RollupHourRow, input: RollupMergeInput): void {
+  target.outputTokens += input.outputTokens ?? 0;
+  target.totalTokens += input.totalTokens ?? 0;
+  target.generationMs += input.generationMs ?? 0;
+  target.modelRequestMs += input.modelRequestMs ?? 0;
+  target.toolExecutionMs += input.toolExecutionMs ?? 0;
+  target.modelRequestCount += input.modelRequestCount ?? 0;
+  target.toolCallCount += input.toolCallCount ?? 0;
+  target.turnCount += input.turnCount ?? 0;
+}
+
+// 把 [fromHour, toHour) 的明细聚合进 rollup（insert or replace，幂等）。
+function mergeDetailHoursIntoRollup(
+  db: DatabaseSync,
+  fromHour: number,
+  toHourExclusive: number,
+): void {
+  if (toHourExclusive <= fromHour) return;
+  const fromMs = fromHour * HOUR_MS;
+  const toMs = toHourExclusive * HOUR_MS;
+
+  const hours = new Map<number, RollupHourRow>();
+  const hourOf = (row: { hourIndex: number | bigint }) => Number(row.hourIndex);
+  const rowOf = (index: number): RollupHourRow => {
+    let row = hours.get(index);
+    if (!row) {
+      row = {
+        hourIndex: index,
+        outputTokens: 0,
+        totalTokens: 0,
+        generationMs: 0,
+        modelRequestMs: 0,
+        toolExecutionMs: 0,
+        modelRequestCount: 0,
+        toolCallCount: 0,
+        turnCount: 0,
+      };
+      hours.set(index, row);
+    }
+    return row;
+  };
+
+  const modelRows = db
+    .prepare(
+      `select
+         cast(started_at / ${HOUR_MS} as integer) as hourIndex,
+         coalesce(sum(output_tokens), 0) as outputTokens,
+         coalesce(sum(computed_total_tokens), 0) as totalTokens,
+         coalesce(sum(
+           case when first_token_at is not null and completed_at is not null
+                  and completed_at > first_token_at
+                then completed_at - first_token_at else 0 end
+         ), 0) as generationMs,
+         coalesce(sum(duration_ms), 0) as modelRequestMs,
+         count(*) as modelRequestCount
+       from model_usage
+       where started_at >= ? and started_at < ?
+       group by hourIndex`,
+    )
+    .all(fromMs, toMs) as Array<{
+    hourIndex: number | bigint;
+    outputTokens: number | bigint;
+    totalTokens: number | bigint;
+    generationMs: number | bigint;
+    modelRequestMs: number | bigint;
+    modelRequestCount: number | bigint;
+  }>;
+  for (const r of modelRows) {
+    mergeRollupHour(rowOf(hourOf(r)), {
+      outputTokens: Number(r.outputTokens),
+      totalTokens: Number(r.totalTokens),
+      generationMs: Number(r.generationMs),
+      modelRequestMs: Number(r.modelRequestMs),
+      modelRequestCount: Number(r.modelRequestCount),
+    });
+  }
+
+  const toolRows = db
+    .prepare(
+      `select
+         cast(started_at / ${HOUR_MS} as integer) as hourIndex,
+         coalesce(sum(duration_ms), 0) as toolExecutionMs,
+         count(*) as toolCallCount
+       from tool_usage
+       where started_at >= ? and started_at < ?
+       group by hourIndex`,
+    )
+    .all(fromMs, toMs) as Array<{
+    hourIndex: number | bigint;
+    toolExecutionMs: number | bigint;
+    toolCallCount: number | bigint;
+  }>;
+  for (const r of toolRows) {
+    mergeRollupHour(rowOf(hourOf(r)), {
+      toolExecutionMs: Number(r.toolExecutionMs),
+      toolCallCount: Number(r.toolCallCount),
+    });
+  }
+
+  const turnRows = db
+    .prepare(
+      `select
+         cast(started_at / ${HOUR_MS} as integer) as hourIndex,
+         count(*) as turnCount
+       from turn_usage
+       where started_at >= ? and started_at < ?
+       group by hourIndex`,
+    )
+    .all(fromMs, toMs) as Array<{ hourIndex: number | bigint; turnCount: number | bigint }>;
+  for (const r of turnRows) {
+    mergeRollupHour(rowOf(hourOf(r)), { turnCount: Number(r.turnCount) });
+  }
+
+  const insert = db.prepare(
+    `insert or replace into usage_rollup_hourly (
+       hour_index, output_tokens, total_tokens, generation_ms, model_request_ms,
+       tool_execution_ms, model_request_count, tool_call_count, turn_count
+     ) values (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  for (const row of hours.values()) {
+    insert.run(
+      row.hourIndex,
+      row.outputTokens,
+      row.totalTokens,
+      row.generationMs,
+      row.modelRequestMs,
+      row.toolExecutionMs,
+      row.modelRequestCount,
+      row.toolCallCount,
+      row.turnCount,
+    );
+  }
+}
+
+/**
+ * 查询前把明细增量合并进 usage_rollup_hourly（docs/specs/usage-stats-app-usage.md）：
+ * ≤cutoff 的小时按 watermark 一次性冻结（明细不可变）；>cutoff 的活动窗口 delete+重建
+ * （tool/turn usage 是 upsert，完成后会回填时长）。冻结后跨越窗口才写入的极长请求/工具
+ * 会漏记（现实时长远小于窗口），接受该边缘。rollup 是趋势读取的唯一来源，prune 不清理。
+ */
+export function refreshUsageRollupHourly(db: DatabaseSync): void {
+  const nowHour = Math.floor(Date.now() / HOUR_MS);
+  const cutoffHour = nowHour - ROLLUP_LIVE_WINDOW_HOURS;
+  const watermarkRow = db
+    .prepare(
+      "select coalesce(max(hour_index), -1) as watermark from usage_rollup_hourly where hour_index <= ?",
+    )
+    .get(cutoffHour) as { watermark: number | bigint };
+  const watermark = Number(watermarkRow?.watermark ?? -1);
+
+  db.exec("begin immediate");
+  try {
+    if (cutoffHour > watermark) {
+      mergeDetailHoursIntoRollup(db, watermark + 1, cutoffHour + 1);
+    }
+    db.prepare("delete from usage_rollup_hourly where hour_index > ?").run(cutoffHour);
+    mergeDetailHoursIntoRollup(db, cutoffHour + 1, nowHour + 1);
+    db.exec("commit");
+  } catch (error) {
+    db.exec("rollback");
+    throw error;
+  }
+}
 
 export async function recordModelUsage(db: DatabaseSync, input: ModelUsageRecord): Promise<void> {
   const computedTotalTokens =
@@ -390,6 +584,10 @@ export async function queryAppUsage(
   const { since, until, tzOffsetMs } = input;
   const DAY_MS = 86_400_000;
 
+  // 趋势读取前先把明细增量合并进 rollup；趋势（天/月/时）只从 rollup 读，
+  // 明细表仅作为 rollup 的写入源（docs/specs/usage-stats-app-usage.md）。
+  refreshUsageRollupHourly(db);
+
   const totals = db
     .prepare(
       `select
@@ -541,6 +739,89 @@ export async function queryAppUsage(
     )
     .all(tzOffsetMs, DAY_MS, since, until) as unknown as AppUsageDayModelRow[];
 
+  // 速率趋势（rollup 唯一读取来源）：过滤与归桶都必须在「本地日」帧（started_at+tz）下
+  // 进行，直接用 since/until 比较 UTC 毫秒会在非 UTC 时区把当前本地日的桶整段截掉。
+  const rateStartDayIndex = Math.floor((since + tzOffsetMs) / DAY_MS);
+  const rateEndDayIndex = Math.floor((until + tzOffsetMs) / DAY_MS);
+  const rollupRows = db
+    .prepare(
+      `select
+         hour_index as hourIndex,
+         output_tokens as outputTokens,
+         generation_ms as generationMs,
+         model_request_ms as modelRequestMs,
+         tool_execution_ms as toolExecutionMs
+       from usage_rollup_hourly
+       where cast((hour_index * ${HOUR_MS} + ?) / ${DAY_MS} as integer) >= ?
+         and cast((hour_index * ${HOUR_MS} + ?) / ${DAY_MS} as integer) <= ?`,
+    )
+    .all(tzOffsetMs, rateStartDayIndex, tzOffsetMs, rateEndDayIndex) as Array<
+    Record<string, number | bigint>
+  >;
+  const rateDayMap = new Map<number, AppUsageRateDayRow>();
+  for (const row of rollupRows) {
+    const hourIndex = Number(row.hourIndex);
+    const dayIndex = Math.floor((hourIndex * HOUR_MS + tzOffsetMs) / DAY_MS);
+    const existing = rateDayMap.get(dayIndex);
+    if (existing) {
+      existing.outputTokens += Number(row.outputTokens);
+      existing.generationMs += Number(row.generationMs);
+      existing.modelRequestMs += Number(row.modelRequestMs);
+      existing.toolExecutionMs += Number(row.toolExecutionMs);
+    } else {
+      rateDayMap.set(dayIndex, {
+        dayIndex,
+        outputTokens: Number(row.outputTokens),
+        generationMs: Number(row.generationMs),
+        modelRequestMs: Number(row.modelRequestMs),
+        toolExecutionMs: Number(row.toolExecutionMs),
+      });
+    }
+  }
+
+  // 所选本地日的 24 小时桶：rollup 按纯 UTC 小时存储，此处按 tzOffsetMs 换算本地小时。
+  // 整点时区精确映射 24 小时；半小时时区下跨本地午夜的那个 UTC 小时归属相邻日（跳过），
+  // 与按日归桶既有的最多 1 小时误差口径一致。
+  let rateHours: AppUsageRateHourRow[] | undefined;
+  if (input.hourlyDate) {
+    const hourlyDayMs = Date.parse(`${input.hourlyDate}T00:00:00Z`);
+    if (Number.isFinite(hourlyDayMs)) {
+      const dayStartHour = Math.floor((hourlyDayMs - tzOffsetMs) / HOUR_MS);
+      const buckets: AppUsageRateHourRow[] = Array.from({ length: 24 }, (_, hour) => ({
+        hour,
+        outputTokens: 0,
+        generationMs: 0,
+        modelRequestMs: 0,
+        toolExecutionMs: 0,
+      }));
+      const rows = db
+        .prepare(
+          `select
+             hour_index as hourIndex,
+             output_tokens as outputTokens,
+             generation_ms as generationMs,
+             model_request_ms as modelRequestMs,
+             tool_execution_ms as toolExecutionMs
+           from usage_rollup_hourly
+           where hour_index >= ? and hour_index < ?`,
+        )
+        .all(dayStartHour, dayStartHour + 24) as Array<Record<string, number | bigint>>;
+      for (const row of rows) {
+        const hourIndex = Number(row.hourIndex);
+        const localHour = Math.floor(
+          (hourIndex * HOUR_MS + tzOffsetMs - hourlyDayMs) / HOUR_MS,
+        );
+        const bucket = localHour >= 0 && localHour < 24 ? buckets[localHour] : undefined;
+        if (!bucket) continue;
+        bucket.outputTokens += Number(row.outputTokens);
+        bucket.generationMs += Number(row.generationMs);
+        bucket.modelRequestMs += Number(row.modelRequestMs);
+        bucket.toolExecutionMs += Number(row.toolExecutionMs);
+      }
+      rateHours = buckets;
+    }
+  }
+
   return {
     totals: {
       totalTokens: Number(totals.totalTokens ?? 0),
@@ -584,6 +865,8 @@ export async function queryAppUsage(
       modelId: d.modelId ?? null,
       totalTokens: Number(d.totalTokens),
     })),
+    rateDays: [...rateDayMap.values()].sort((a, b) => a.dayIndex - b.dayIndex),
+    ...(rateHours ? { rateHours } : {}),
   };
 }
 

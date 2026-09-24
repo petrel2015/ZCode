@@ -12,6 +12,7 @@ import type {
   ToolCallId,
   TraceContext,
   TurnId,
+  TurnWorkTiming,
   UsageStorePort,
 } from "@zcode/contracts";
 import type { RuntimeModelTextResult } from "../types.js";
@@ -390,6 +391,56 @@ export function firstModelTokenAt(
     }
   }
   return undefined;
+}
+
+/**
+ * 轮级工时拆分（docs/specs/session-token-throughput.md「轮级工时拆分」）：
+ * Σ 模型请求 wall 时长（completed 必带 durationMs、failed 可选缺省，含首 token 等待）
+ * 与 Σ 工具调用 duration（ToolCallResult；错误调用无 duration 不计入）。
+ * 累计口径：并行工具、streaming-tool 与模型流重叠会重复计入，不做 wall 去重叠——
+ * 拆分目的是瓶颈归因，重复计入比丢时段更可接受。
+ */
+export function aggregateTurnWorkTiming(events: readonly SessionEvent[]): {
+  modelRequestMs: number;
+  toolExecutionMs: number;
+} {
+  let modelRequestMs = 0;
+  let toolExecutionMs = 0;
+  for (const event of events) {
+    if (event.type === SessionEventType.ModelNetworkStatus) {
+      const payload = event.payload as { type?: string; durationMs?: number };
+      if (
+        (payload.type === "model_request_completed" || payload.type === "model_request_failed") &&
+        typeof payload.durationMs === "number" &&
+        payload.durationMs > 0
+      ) {
+        modelRequestMs += payload.durationMs;
+      }
+      continue;
+    }
+    if (event.type === SessionEventType.ToolCallResult) {
+      const payload = event.payload as { duration?: number };
+      if (typeof payload.duration === "number" && payload.duration > 0) {
+        toolExecutionMs += payload.duration;
+      }
+    }
+  }
+  return { modelRequestMs, toolExecutionMs };
+}
+
+/**
+ * 组装 TurnComplete.workTiming：时长拆分 + 轮级 output tokens（来自 usage 轮级汇总，
+ * 与 turn_usage 同源）。三个 TurnComplete 发射点共用，避免各自拼装口径漂移。
+ */
+export function turnWorkTimingFromEvents(
+  events: readonly SessionEvent[],
+  usage?: { outputTokens?: number },
+): TurnWorkTiming {
+  const timing = aggregateTurnWorkTiming(events);
+  return {
+    ...timing,
+    ...(usage?.outputTokens !== undefined ? { outputTokens: usage.outputTokens } : {}),
+  };
 }
 
 function errorInfoFor(

@@ -355,6 +355,50 @@ nodes:
     codeSeeds:
       - file: apps/zcode-cli/packages/core/src/runtime/methods/turn-model.ts
         symbol: applySubmissionExecutionState
+  - id: capability.usage-rate-trend
+    kind: capability
+    label: Usage stats token rate trend charts (day/month/hour-of-day)
+    aliases:
+      - token rate trend
+      - average rate
+      - monthly rate
+      - hourly rate
+      - 速率趋势
+      - 平均速率
+      - 按月速率
+      - 每小时速率
+    codeSeeds:
+      - file: apps/zcode-cli/packages/adapters/src/storage/session-store/repositories/usage.ts
+        symbol: refreshUsageRollupHourly
+      - file: apps/zcode-cli/packages/bootstrap/src/zcode-protocol/usage-stats-builder.ts
+        symbol: buildAppUsageSnapshot
+      - file: packages/ui/src/settings/usage-stats/AppUsageRateTrendChart.tsx
+        symbol: AppUsageRateTrendChart
+    invariants:
+      - usage_rollup_hourly is the only read source for rate trends; detail tables are its write
+        source and keep the 30-day prune. Buckets without valid generation time are null (N/A),
+        never zero.
+  - id: state.turn-work-timing
+    kind: state-owner
+    label: Turn-level work timing split (model request vs local tool execution)
+    aliases:
+      - work timing
+      - worked for
+      - bottleneck split
+      - 工时拆分
+      - 已工作
+      - 瓶颈
+    codeSeeds:
+      - file: apps/zcode-cli/packages/core/src/runtime/methods/usage-observability.ts
+        symbol: aggregateTurnWorkTiming
+      - file: apps/zcode-cli/packages/bootstrap/src/zcode-protocol-v4/product-projection.ts
+        symbol: upsertTurnHeader
+    invariants:
+      - CLI core is the single owner; TurnComplete.workTiming flows through the v4 projection into
+        turnHeaderRow and UI derives rates read-only. Sums are cumulative: parallel tool and
+        streaming-tool overlap is double counted, and guide-segmented turns do not split the
+        whole-turn timing.
+
 edges:
   - from: capability.model-selection
     to: surface.conversation-model-control

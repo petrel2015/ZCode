@@ -16,6 +16,8 @@ interface BuildAppUsageOptions {
   generatedAt: number;
   since: number;
   until: number;
+  /** 可选：同时产出该本地日的 24 小时速率桶。 */
+  hourlyDate?: string;
 }
 
 /** 用 Intl 计算 timeZone 在 atMs 时刻相对 UTC 的偏移（ms）。无法解析时回退 0。 */
@@ -61,6 +63,21 @@ function levelFor(tokens: number, max: number): AppUsageHeatmapCell["level"] {
   return 1;
 }
 
+// 速率 = Σ outputTokens ÷ Σ 生成时长（首 token → 请求完成）。桶内无有效生成时段时
+// 返回 null（UI 显示 N/A 而不是 0——0 会误读为“零产出”）。
+function bucketRate(sums: Pick<RateBucketSums, "outputTokens" | "generationMs">): number | null {
+  return sums.generationMs > 0 && sums.outputTokens > 0
+    ? (sums.outputTokens * 1000) / sums.generationMs
+    : null;
+}
+
+interface RateBucketSums {
+  outputTokens: number;
+  generationMs: number;
+  modelRequestMs: number;
+  toolExecutionMs: number;
+}
+
 function resolveUsageStartDayIndex(
   result: AppUsageQueryResult,
   opts: BuildAppUsageOptions,
@@ -70,9 +87,12 @@ function resolveUsageStartDayIndex(
     return Math.floor((opts.since + opts.tzOffsetMs) / DAY_MS);
   }
 
+  // rollup 是永久表：它的最早 dayIndex 可能早于 30 天明细，必须一并参与
+  // 起点推导，否则长期闲置后重新使用会把趋势起点错误地折叠到最后一天。
   const dayIndexes = [
     ...result.days.map((day) => day.dayIndex),
     ...result.dayModels.map((dayModel) => dayModel.dayIndex),
+    ...result.rateDays.map((day) => day.dayIndex),
   ];
   if (dayIndexes.length === 0) {
     return endDayIndex;
@@ -206,6 +226,85 @@ export function buildAppUsageSnapshot(
     avgDurationMs: t.avgDurationMs,
   }));
 
+  // 速率趋势（docs/specs/usage-stats-app-usage.md）：按天连续补齐（空日 null），
+  // 按月由天序列聚合；rateHours 是请求指定日的 24 桶（缺省为 null 整体）。
+  const rateDayMap = new Map<number, RateBucketSums>();
+  for (const d of result.rateDays) {
+    rateDayMap.set(d.dayIndex, {
+      outputTokens: d.outputTokens,
+      generationMs: d.generationMs,
+      modelRequestMs: d.modelRequestMs,
+      toolExecutionMs: d.toolExecutionMs,
+    });
+  }
+  const daily = [];
+  const monthlyMap = new Map<string, RateBucketSums>();
+  for (let di = startDayIndex; di <= endDayIndex; di += 1) {
+    const sums = rateDayMap.get(di) ?? {
+      outputTokens: 0,
+      generationMs: 0,
+      modelRequestMs: 0,
+      toolExecutionMs: 0,
+    };
+    const date = dayIndexToDate(di);
+    daily.push({ key: date, avgTokensPerSecond: bucketRate(sums), ...sums });
+    const monthKey = date.slice(0, 7);
+    const month = monthlyMap.get(monthKey) ?? {
+      outputTokens: 0,
+      generationMs: 0,
+      modelRequestMs: 0,
+      toolExecutionMs: 0,
+    };
+    month.outputTokens += sums.outputTokens;
+    month.generationMs += sums.generationMs;
+    month.modelRequestMs += sums.modelRequestMs;
+    month.toolExecutionMs += sums.toolExecutionMs;
+    monthlyMap.set(monthKey, month);
+  }
+  const monthly = [...monthlyMap.entries()].map(([key, sums]) => ({
+    key,
+    avgTokensPerSecond: bucketRate(sums),
+    ...sums,
+  }));
+  const rateTrend: AppUsageSnapshot["rateTrend"] = {
+    daily,
+    monthly,
+    hourly: opts.hourlyDate
+      ? {
+          date: opts.hourlyDate,
+          // 密集化为 24 桶：仓库层保证稠密，这里兜底稀疏输入，UI 无需补齐逻辑。
+          hours: (() => {
+            const buckets = Array.from({ length: 24 }, (_, hour) => ({
+              hour,
+              outputTokens: 0,
+              generationMs: 0,
+              modelRequestMs: 0,
+              toolExecutionMs: 0,
+            }));
+            for (const h of result.rateHours ?? []) {
+              if (h.hour >= 0 && h.hour < 24) {
+                const bucket = buckets[h.hour];
+                if (bucket) {
+                  bucket.outputTokens = h.outputTokens;
+                  bucket.generationMs = h.generationMs;
+                  bucket.modelRequestMs = h.modelRequestMs;
+                  bucket.toolExecutionMs = h.toolExecutionMs;
+                }
+              }
+            }
+            return buckets.map((bucket) => ({
+              hour: bucket.hour,
+              avgTokensPerSecond: bucketRate(bucket),
+              outputTokens: bucket.outputTokens,
+              generationMs: bucket.generationMs,
+              modelRequestMs: bucket.modelRequestMs,
+              toolExecutionMs: bucket.toolExecutionMs,
+            }));
+          })(),
+        }
+      : null,
+  };
+
   return {
     range: opts.range,
     generatedAt: opts.generatedAt,
@@ -237,5 +336,6 @@ export function buildAppUsageSnapshot(
     dailyModelUsage,
     models,
     tools,
+    rateTrend,
   };
 }

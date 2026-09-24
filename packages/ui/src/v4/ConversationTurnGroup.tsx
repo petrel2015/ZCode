@@ -83,7 +83,11 @@ import type {
   ConversationTurnRenderUnit,
   ConversationTurnWorkSegment,
 } from "@/v4/conversationTurnRenderUnits.js";
-import { formatConversationWorkDuration } from "@/v4/conversationWorkDuration.js";
+import {
+  formatConversationWorkDuration,
+  formatConversationWorkTimingDetail,
+} from "@/v4/conversationWorkDuration.js";
+import { resolveConversationTurnWorkRates } from "@/v4/conversationTurnWorkSegments.js";
 import { ConversationTurnRow, resolveAssistantCopyText } from "@/v4/ConversationTurnRow.js";
 import { ConversationHookDetailsAction } from "@/v4/ConversationHookDetailsAction.js";
 import { toolCallRowToLegacyNode } from "@/v4/toolCallRowAdapter.js";
@@ -575,22 +579,32 @@ function AssistantHistoryStatus({
     intl,
     locale,
   );
+  // 轮级速率（docs/specs/session-token-throughput.md）：整体速率进主行，拆分进
+  // 悬停 title；展开区常显一行明细作为触屏/无 hover 的兜底。缺事实时回退现状文案。
+  const overallRate = resolveConversationTurnWorkRates(segment.workStatus).overallTokensPerSecond;
+  const timingDetail = formatConversationWorkTimingDetail(segment.workStatus, intl, locale);
   const label =
     segment.workStatus?.state === "interrupted"
       ? intl.formatMessage({ id: "chat.history.stopped" })
       : segment.workStatus?.state === "running"
         ? intl.formatMessage({ id: "chat.history.workingFor" }, { duration: durationLabel ?? "" })
         : durationLabel
-          ? intl.formatMessage({ id: "chat.history.workedFor" }, { duration: durationLabel })
+          ? overallRate !== undefined
+            ? intl.formatMessage(
+                { id: "chat.history.workedForWithRate" },
+                { duration: durationLabel, rate: overallRate.toFixed(1) },
+              )
+            : intl.formatMessage({ id: "chat.history.workedFor" }, { duration: durationLabel })
           : intl.formatMessage({ id: "chat.history.worked" });
 
   return (
-    <div className="flex w-full border-b border-[var(--color-border)]/50 pb-2">
+    <div className="flex w-full flex-col border-b border-[var(--color-border)]/50 pb-2">
       <CollapsibleTrigger asChild>
         <button
           type="button"
           data-testid={testId(TID_CHAT_ASSISTANT_HISTORY_TRIGGER, segment.key)}
           data-history-open={String(open)}
+          title={timingDetail ?? undefined}
           className="group/history-message inline-flex max-w-full items-center gap-2 text-left text-ui-base text-foreground-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-input-border-focused)]"
         >
           <span className="truncate">{label}</span>
@@ -605,6 +619,9 @@ function AssistantHistoryStatus({
           ) : null}
         </button>
       </CollapsibleTrigger>
+      {open && timingDetail ? (
+        <div className="pt-1 text-ui-sm text-foreground-subtlest">{timingDetail}</div>
+      ) : null}
     </div>
   );
 }

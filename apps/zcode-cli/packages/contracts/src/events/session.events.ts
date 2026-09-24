@@ -583,12 +583,28 @@ export interface TurnCompletePayload {
   duration: number;
   inputId?: string;
   resultType: TurnResultType;
+  /**
+   * 轮级工时拆分（docs/specs/session-token-throughput.md「轮级工时拆分」）：
+   * Σ 模型请求 wall 时长（completed+failed，含首 token 等待）与 Σ 工具执行时长。
+   * 累计口径：并行工具、streaming-tool 与模型流重叠会重复计入。
+   * 合成 TurnComplete（compact/rewind/control-only/hook 阻断）不带真实工时，缺省。
+   */
+  workTiming?: TurnWorkTiming;
   /** 当前 turn 是否消费过来源为 subagent 的后台结果通知。 */
   backgroundSubagentResultConsumed?: boolean;
   /** 当前 turn 是否消费过来源为 workflow（dynamic-workflow run）的后台通知。 */
   workflowResultConsumed?: boolean;
   /** 内部抢占（如 sendQueuedNow）只终止当前 turn，不等价于用户手动 Stop 队列。 */
   preserveQueueAutoDrainOnCancel?: boolean;
+}
+
+export interface TurnWorkTiming {
+  /** Σ 模型请求 wall 时长（completed 必带 durationMs，failed 可选缺省），毫秒。 */
+  modelRequestMs: number;
+  /** Σ 每次工具调用 duration（ToolCallResult），毫秒；错误调用无 duration 不计入。 */
+  toolExecutionMs: number;
+  /** 轮级 output tokens（TurnComplete usage 轮级汇总）；缺 usage 汇总时缺省。 */
+  outputTokens?: number;
 }
 
 export interface TurnErrorPayload {
