@@ -1778,6 +1778,7 @@ export async function getUsageStats(context: ZCodeProtocolAgentServerContext, ra
     generatedAt: until,
     since,
     until,
+    ...(params.hourlyDate ? { hourlyDate: params.hourlyDate } : {}),
   };
 
   // SessionStorePort 与 UsageStorePort 是分离接口，但实际 store 同时实现两者；
@@ -1809,12 +1810,18 @@ export async function getUsageStats(context: ZCodeProtocolAgentServerContext, ra
         tools: [],
         days: [],
         dayModels: [],
+        rateDays: [],
       },
       buildOptions,
     );
   }
 
-  const result = await usageStore.queryAppUsage({ since, until, tzOffsetMs });
+  const result = await usageStore.queryAppUsage({
+    since,
+    until,
+    tzOffsetMs,
+    ...(params.hourlyDate ? { hourlyDate: params.hourlyDate } : {}),
+  });
   return buildAppUsageSnapshot(result, buildOptions);
 }
 

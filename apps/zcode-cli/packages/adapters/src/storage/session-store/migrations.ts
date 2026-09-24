@@ -925,6 +925,27 @@ export const SQLITE_MIGRATIONS: readonly SqliteMigration[] = [
     id: "0022_backfilled_session_reasoning",
     sql: BACKFILLED_SESSION_REASONING_MIGRATION_SQL,
   },
+  {
+    appVersion: "0.16.5",
+    id: "0023_usage_rollup_hourly",
+    // 永久小时汇总（docs/specs/usage-stats-app-usage.md）：明细三表只保留 30 天，
+    // 速率趋势（天/月/时）的长期历史由该表承载。hour_index 用 UTC 小时
+    // floor(started_at/3600000) 存储，查询侧按 tzOffsetMs 二次归桶（整点时区精确，
+    // 半小时时区与 DST 沿用按日归桶既有的最多 1 小时误差口径）。
+    sql: `
+      create table if not exists usage_rollup_hourly (
+        hour_index integer primary key,
+        output_tokens integer not null default 0,
+        total_tokens integer not null default 0,
+        generation_ms integer not null default 0,
+        model_request_ms integer not null default 0,
+        tool_execution_ms integer not null default 0,
+        model_request_count integer not null default 0,
+        tool_call_count integer not null default 0,
+        turn_count integer not null default 0
+      );
+    `,
+  },
 ];
 import { OFFICIAL_GLM_SELECTION_MIGRATION_SQL } from "./migrations/0021-official-glm-selection.js";
 import { BACKFILLED_SESSION_REASONING_MIGRATION_SQL } from "./migrations/0022-backfilled-session-reasoning.js";

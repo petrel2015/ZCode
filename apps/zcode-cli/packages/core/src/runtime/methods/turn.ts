@@ -53,7 +53,10 @@ import {
 } from "./session-title.js";
 import type { RegularTurnLoopState } from "./turn-loop-state.js";
 import { finishOutputTokenRecovery } from "./turn-output-token-continuation.js";
-import { recordTurnUsageFact } from "./usage-observability.js";
+import {
+  recordTurnUsageFact,
+  turnWorkTimingFromEvents,
+} from "./usage-observability.js";
 import { persistStableForkCompletionBoundary } from "./stable-fork-boundary.js";
 import {
   closeGoalStateChangeReminderDeferral,
@@ -384,6 +387,8 @@ export async function executeTurnCommand(
               resultType: "success",
               cacheStats: this.messageHistory.getCacheStats(),
               inputId: options?.inputId,
+              // hook 阻断轮没有模型/工具工作，拆分为 {0,0}；保持接线统一，UI 对 0 时长不显示速率。
+              workTiming: turnWorkTimingFromEvents(events, turnUsage),
             },
             turnTraceContext,
           );
@@ -652,6 +657,10 @@ export async function executeTurnCommand(
             historyRoundCount: loopState.historyRoundCount,
             duration: Date.now() - turnMachine.state.startedAt.getTime(),
             resultType: "success",
+            // 轮级工时拆分（docs/specs/session-token-throughput.md）：Σ 模型请求 wall
+            // 时长 + Σ 工具执行时长 + 轮级 output tokens，累计口径，随事件下发供
+            // 投影/UI 做瓶颈归因。
+            workTiming: turnWorkTimingFromEvents(events, turnUsage),
             ...(loopState.backgroundSubagentResultConsumed
               ? { backgroundSubagentResultConsumed: true }
               : {}),

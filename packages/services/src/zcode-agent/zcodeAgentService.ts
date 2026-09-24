@@ -3393,7 +3393,11 @@ export function createZCodeAgentService(
       // 载荷同形；旧词消费清零，CLI 旧 case 留到旧词删除之时）。
       return active.client.request(
         V4_METHODS.usageStats,
-        { range: params.range, timeZone: params.timeZone },
+        {
+          range: params.range,
+          timeZone: params.timeZone,
+          ...(params.hourlyDate ? { hourlyDate: params.hourlyDate } : {}),
+        },
         v4UsageStatsResultSchema,
       );
     },

@@ -3324,6 +3324,16 @@ const enUS: Record<string, string> = {
   "settings.usage.heatmap.range.weekly": "Weekly",
   "settings.usage.heatmap.range.cumulative": "Cumulative",
   "settings.usage.dailyChartTitle": "Daily token trend chart",
+  "settings.usage.rateTrend.title": "Token rate trend",
+  "settings.usage.rateTrend.granularity.day": "Daily",
+  "settings.usage.rateTrend.granularity.month": "Monthly",
+  "settings.usage.rateTrend.granularity.hour": "Hourly",
+  "settings.usage.rateTrend.notAvailable": "N/A",
+  "settings.usage.rateTrend.rateUnit": "token/s",
+  "settings.usage.rateTrend.timingDetail":
+    "Model requests {model} · local execution {local} (parallel time counted cumulatively)",
+  "settings.usage.rateTrend.prevDay": "Previous day",
+  "settings.usage.rateTrend.nextDay": "Next day",
   "settings.usage.dailyChartDescription": "Token usage trend by day across {days} days.",
   "settings.usage.dailyChart.peak": "Peak day",
   "settings.usage.dailyChart.max": "Max",
@@ -4295,6 +4305,11 @@ const enUS: Record<string, string> = {
   "chat.message.retry": "Retry",
   "chat.history.workingFor": "Working for {duration}",
   "chat.history.workedFor": "Worked for {duration}",
+  "chat.history.workedForWithRate": "Worked for {duration} · avg {rate} token/s",
+  "chat.history.workTimingDetail":
+    "Local execution {local} · model requests {model} · model-phase {modelRate} token/s (parallel time counted cumulatively)",
+  "chat.history.workTimingBreakdown":
+    "Local execution {local} · model requests {model} (parallel time counted cumulatively)",
   "chat.history.worked": "Worked",
   "chat.history.stopped": "Stopped",
   "chat.history.duration.day": "d",
