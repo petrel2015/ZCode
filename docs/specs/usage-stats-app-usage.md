@@ -5,6 +5,7 @@ Status: restored in the standalone runtime. Approved scope: re-introduce the set
 ## Product contract
 
 - The settings sidebar exposes a "使用统计" section (`usage`). It renders the App usage panel: lifetime summary, activity heatmap, per-range (7d/30d) daily model trend and model share charts, the token rate trend chart (day / month / hour-of-day granularities), plus a manual refresh.
+- The bottom-left avatar (profile) dropdown menu provides a "使用统计" entry, placed after the desktop-only zoom submenu (fixed order: 语言 → 主题 → 界面模式 → 缩放 → 使用统计). Selecting it sets the pending usage-section intent and opens the settings page directly on the "使用统计" section, without overriding the user's last-viewed usage tab. The standalone menu keeps only this entry from the retired account block — "升级" and "邀请好友" stay removed with the platform account system.
 - Data is local only. The panel reads usage recorded by the agent into the global session database. It never calls `zcode.z.ai`, the retired monitor API, or any entitlement/quota endpoint.
 - No Coding Plan tab, account source switcher, quota banner or purchase entry is rendered. Usage-section navigation intents (`usageTab`) that name `codingPlan` fall back to the App usage panel because it is the only content.
 
