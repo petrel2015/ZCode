@@ -77,6 +77,8 @@ export const WorkspaceSidebarFooter = memo(function WorkspaceSidebarFooterCompon
   onSettingsButtonClick,
   settingsButtonMode = "settings",
   user,
+  workspacePath,
+  workspaceIdentity,
   isDesktop = false,
   className,
 }: {
