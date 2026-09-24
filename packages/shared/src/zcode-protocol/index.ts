@@ -1248,6 +1248,16 @@ export const zcodeTurnCompletedEventPayloadSchema = z
       .strict()
       .optional(),
     inputId: nonEmptyString.optional(),
+    // 轮级工时拆分（docs/specs/session-token-throughput.md）：Σ 模型请求 wall 时长与
+    // Σ 工具执行时长，累计口径。additive optional，旧 CLI 缺省可解析。
+    workTiming: z
+      .object({
+        modelRequestMs: z.number().nonnegative(),
+        toolExecutionMs: z.number().nonnegative(),
+        outputTokens: z.number().nonnegative().optional(),
+      })
+      .strict()
+      .optional(),
     resultType: z.enum([
       "success",
       // "cancelled": 用户主动中断属于正常结束，复用 turn.completed 上报，避免被映射成 turn.failed。
@@ -1622,6 +1632,11 @@ export const zcodeUsageStatsParamsSchema = z
   .object({
     range: z.enum(APP_USAGE_RANGES),
     timeZone: z.string().optional(),
+    // additive：请求所选本地日的 24 小时速率桶（docs/specs/usage-stats-app-usage.md）。
+    hourlyDate: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .optional(),
   })
   .strict();
 export const zcodeUsageStatsResultSchema = appUsageSnapshotSchema;
