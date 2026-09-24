@@ -6,7 +6,7 @@ import { ChartContainer, ChartTooltip } from "@/components/ui/chart.js";
 import { Button } from "@/components/ui/button.js";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
-import { useLocalAppUsageStats } from "@/hooks/useUsageStats.js";
+import { useLocalAppUsageStats } from "@/hooks/useLocalAppUsageStats.js";
 import { formatAppUsageDuration } from "@/settings/usage-stats/AppUsagePanel.js";
 import { APP_USAGE_TREND_CHART_MARGIN } from "@/settings/usage-stats/AppUsageDailyModelTrendChart.js";
 import { getAppUsageModelChartColor } from "@/settings/usage-stats/appUsageChartPalette.js";

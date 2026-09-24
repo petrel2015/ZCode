@@ -18,7 +18,6 @@ import {
   WandSparkles,
   Keyboard,
   FileSearch,
-  BarChart3,
 } from "lucide-react";
 import { isSettingsSectionEnabled, type SettingsSectionId } from "@/lib/settingsNavigation.js";
 import type { Theme } from "@/useTheme.js";
