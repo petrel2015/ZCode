@@ -8,6 +8,31 @@ Status: implemented. Covers the installable identity separation between the stan
 - Identity is selected at build time via `ZCODE_STANDALONE_IDENTITY=1` (same strict `1`/`0`/empty validation as `ZCODE_PREVIEW_IDENTITY`); it outranks the backend-env axis: a standalone build with `ZCODE_ENV=production` keeps production endpoints but takes the standalone identity.
 - The single source of truth for identity is `desktopProductIdentities` in `packages/desktop/scripts/desktop-product-identity.mjs`. Runtime processes never re-derive it: electron-builder copies `zcodeProductFlavor`, `zcodeDeepLinkScheme`, and `zcodeLinuxExecutableName` into the packaged `package.json` (`extraMetadata`), and the main process reads that channel (`resolveDesktopRuntimeIdentity`). Dev fallback is the production identity.
 - The brand mark is the "rogue ninja / battle-damaged" Z: the original black-squircle white italic Z with its two slice gaps, struck by a torn horizontal slash (missing-nin scratched-forehead-protector motif, monochrome), with battle damage (chips at stroke ends, cracks and debris around the slash, a chipped tile corner). Small sizes (≤64px) drop the damage detail and shorten the slash to stay legible. Source SVGs live in `packages/desktop/build/logo/`; `packages/desktop/scripts/generate-icon-assets.mjs` regenerates every packaged icon from them.
+- The mark exists in three forms, and every form must be battle-damaged: (a) file assets (`build/logo/*.svg` and the PNG/ICNS/ICO they generate), (b) file-asset React imports (`logo-zai.svg`, `Z.svg`), and (c) **inline SVG glyphs** in components and HTML shells (transparent background, `fill="currentColor"`, simplified geometry with the slash kept as a cut-out, same path data everywhere).
+
+## Brand render-point registry (exhaustive)
+
+Every place the brand mark renders must be listed here. **A new brand render point must be registered in this list before it ships** — the #17 gap existed precisely because inline copies were never tracked anywhere.
+
+In-UI inline glyphs (simplified battle-damaged geometry, `currentColor`):
+
+- `packages/ui/src/components/ui/ZCodeAboutLogo.tsx` — onboarding welcome logo (`OnboardingWelcomeView`, rendered at 32px inside the dark rounded shell)
+- `packages/ui/src/root/RootStartupLoading.tsx` — `ZCodeStartupLogo` (startup loading, data-upgrade screen `GlobalDatabaseStartupLoading`, occupation onboarding badge; rendered at 56px inside `ZCodeStartupLogoBadge`)
+
+HTML shell inline glyphs (pre-React first paint, one copy each, same path data as the component glyphs):
+
+- `packages/desktop/src/renderer/index.html` — desktop startup first-paint logo
+- `packages/web/index.html` — web boot loading logo (`.zcode-boot-loading__logo`)
+
+File-form assets:
+
+- `packages/desktop/build/logo/standalone-mark.svg` / `standalone-mark-small.svg` — sources of truth (full ≥128px, simplified ≤64px)
+- `packages/desktop/build/icon.*`, `icon_installer.*`, `icon_windows.png`, `build/icons/*` — packaged app/installer icons (generated)
+- `packages/desktop/build/dmg_background.png` / `dmg_background@2x.png` — DMG install background (white + full battle-damaged Z + "ZCode Standalone" wordmark), generated from `packages/desktop/build/logo/dmg_background.svg`; `dmg.contents` icon coordinates (130,220)/(410,220) must stay clear of the wordmark
+- `public/icon_512@2x.png` (repo root) — update dialog dock icon (generated, 1024×1024)
+- `public/logo/icons/` (repo root) — archived icon set mirrored from `build/` by the generate script (icns/ico/all PNG sizes)
+- `packages/web/public/favicon.ico` — web favicon (7-size ICO, sizes ≤64px use the simplified variant; `dist/` copies are build output, never hand-edited)
+- `packages/ui/src/assets/logo-zai.svg`, `packages/ui/src/assets/Z.svg` — file-form in-UI marks (already battle-damaged since #8)
 
 ## Identity matrix
 
@@ -43,7 +68,7 @@ flowchart LR
 - With `ZCODE_STANDALONE_IDENTITY=1`: artifacts are named `ZCode Standalone-<version>-...`, the macOS bundle is `ZCode Standalone.app` with `CFBundleIdentifier=dev.zcode.standalone`, `CFBundleURLTypes` declares only `zcode-standalone`, and `codesign` shows `Identifier=dev.zcode.standalone`.
 - `ZCode Standalone.app` and an official `ZCode.app` both installed: separate userData dirs, both launchable, `zcode://` still routes to the official app, `zcode-standalone://` routes to the standalone app.
 - Linux: `zcode-standalone.desktop` / `zcode.desktop` coexist; installing one never deletes or shadows the other's registrations.
-- Every packaged icon (icns/ico/png/AppImage icons, installer icons) and the in-UI marks (`logo-zai.svg`, `Z.svg`) render the battle-damaged slash-Z; at 32px the simplified variant stays recognizable.
+- Every render point in the brand render-point registry (packaged icons, inline component glyphs, HTML shell glyphs, DMG background, update-dialog icon, archived icons, web favicon) renders the battle-damaged slash-Z; at 32px the simplified variant stays recognizable. Rerunning `generate-icon-assets.mjs` reproduces every generated asset in the registry.
 - Without the env var, output is byte-for-byte the previous production identity (no filename or behavior drift for non-standalone builds).
 
 ## Validation record
