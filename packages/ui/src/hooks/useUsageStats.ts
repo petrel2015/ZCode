@@ -244,7 +244,7 @@ export function useAppUsageStats(range: AppUsageRange) {
 // 本地恢复版数据路径不同——只聚合本地 session 库的真实统计，经 zcodeAgentService →
 // v4 usage/stats → CLI usage store 读取；不经过任何平台 monitor API，
 // 因此改名 useLocalAppUsageStats 与官方 hook 并存（issue #16 两套并存拍板）。
-export function useLocalAppUsageStats(range: AppUsageRange) {
+export function useLocalAppUsageStats(range: AppUsageRange, hourlyDate?: string) {
   const { zcodeAgentService } = useServices();
   const [state, setState] = useState<AppUsageStatsState>({
     snapshot: null,
@@ -263,9 +263,13 @@ export function useLocalAppUsageStats(range: AppUsageRange) {
       error: null,
     }));
     try {
+      // App Usage 只聚合本地 session 库的真实统计，经 zcodeAgentService →
+      // v4 usage/stats → CLI usage store 读取；不经过任何平台 monitor API。
+      // hourlyDate 仅请求该日的 24 小时速率桶（docs/specs/usage-stats-app-usage.md）。
       const snapshot = await zcodeAgentService.getAppUsageStats({
         range,
         timeZone,
+        ...(hourlyDate ? { hourlyDate } : {}),
       });
       if (requestVersionRef.current !== requestVersion) {
         return;
@@ -287,7 +291,7 @@ export function useLocalAppUsageStats(range: AppUsageRange) {
         error: message,
       }));
     }
-  }, [range, zcodeAgentService]);
+  }, [range, hourlyDate, zcodeAgentService]);
 
   useEffect(() => {
     void refresh();

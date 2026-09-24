@@ -79,6 +79,16 @@ export const turnHeaderRowSchema = z.object({
   endedAt: timestampSchema.optional(),
   // 权威工时：排除权限等待/用户输入等待/verifier 等待。
   activeMs: z.number().optional(),
+  // 轮级工时拆分（docs/specs/session-token-throughput.md）：Σ 模型请求 wall 时长与
+  // Σ 工具执行时长，累计口径（并行/streaming 重叠重复计入）。整轮口径，guide 分段不
+  // 细分；旧快照/合成 TurnComplete（compact/rewind/control-only）缺省。
+  workTiming: z
+    .object({
+      modelRequestMs: z.number().nonnegative(),
+      toolExecutionMs: z.number().nonnegative(),
+      outputTokens: z.number().nonnegative().optional(),
+    })
+    .optional(),
   // guide 不切 product turn，但每条 accepted guide 都开启独立视觉工作段。
   // 普通 turn 缺省以保持旧 snapshot 兼容；一旦出现 guide，CLI 负责完整投影首段与后续段。
   workSegments: z.array(turnWorkSegmentSchema).optional(),

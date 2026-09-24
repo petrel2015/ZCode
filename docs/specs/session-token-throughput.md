@@ -1,6 +1,6 @@
 # Session token throughput（会话 token 效率）
 
-Status: spec；实现随本 spec 落地（第二版：composer 双表盘常驻）。
+Status: spec；实现随本 spec 落地（第二版：composer 双表盘常驻；第三版：轮级工时拆分 workTiming）。
 
 ## 产品规则
 
@@ -91,3 +91,53 @@ sessionUsageStateSchema.throughput = z
 - compact、标题生成等旁路调用不改变平均值。
 - 旧快照（usage 无 throughput 字段）经新 schema 解析得到 `throughput: null`，UI 平均显示 `—`；旧 CLI 的 ModelComplete（无 throughput payload）不抹掉快照已有值。
 - 纯函数测试覆盖：core 累积器（缺值轮跳过、token 加权平均、last 值）、schema 旧快照兼容解析、chip 的 null→0 / avg `—` 映射；既有 streamingTokenRate 10 例保持通过。
+
+## 轮级工时拆分（workTiming，第三版）
+
+### 产品规则
+
+轮历史触发行「已工作 {duration}」追加速率与工时归因，回答「瓶颈在本地还是大模型」：
+
+- 主行：`已工作 {duration} · 平均 {rate} token/s`；运行中轮无 workTiming 时保持现状文案（只显示时长）。
+- 悬停（title）与展开的历史区头部常显同款拆分行（触屏/无 hover 兜底）：
+  `本地执行 {local} · 模型请求 {model} · 模型期 {rate2} token/s`。
+- 口径：
+  - **整体速率（轮）** = 轮 outputTokens ÷ `turnHeader.activeMs`（权威工时，已排除权限/用户输入等待）。
+  - **模型期速率（轮）** = 轮 outputTokens ÷ Σ 模型请求 wall 时长（`durationMs`，含首 token 等待与失败请求）。
+  - **本地执行时长** = Σ 每次工具调用 `duration`；**模型请求时长** = Σ 每次模型请求 `durationMs`。并行工具、streaming-tool 与模型流重叠时按**累计口径**（重复计入），UI 注明，不冒充 wall 时长。
+  - 任一时长为 0 或 tokens 缺失时对应速率不显示（undefined，不显示 0）。
+- 轮级 outputTokens 复用 `TurnCompletePayload.usage`（`createModelUsageSummaryFromEvents` 轮级汇总，与 turn_usage 同源）。
+
+### 所有权与边界
+
+- **事实唯一所有者：CLI core runtime**。聚合函数（`usage-observability.ts`）在 TurnComplete 发射点从轮事件流计算 Σ`model_request_completed/failed.durationMs` 与 Σ`ToolCallResult.duration`，随 `TurnCompletePayload.workTiming`（additive optional）下发。
+- 接线点：`turn.ts` 成功路径与 hook 阻断路径、`turn-errors.ts` 取消路径（TurnComplete resultType:"cancelled"）。control-only、compact、rewind 的合成 TurnComplete 不带 workTiming（无真实模型/工具工作）。
+- 投影：bootstrap `product-projection.onTurnComplete` 把 `payload.workTiming` 写入 v4 `turnHeaderRow.workTiming`（additive optional）；`splitProductTurn` 不拆分——workTiming 是整轮口径，guide 分段不细分。旧快照缺字段 → optional 解析为缺席，UI 回退现状显示。
+- UI 只读派生：`conversationTurnWorkSegments` 以纯函数由 `header.workTiming` + `activeMs` + tokens 派生速率；不自行累计、不回写、不入 Zustand。
+- 协议面：`TurnCompletePayload.workTiming`（contracts）、`zcodeTurnCompletedEventPayloadSchema.workTiming`（shared 旧协议，additive optional）、`turnHeaderRowSchema.workTiming`（v4 rows，additive optional）。不改帧协议、不引入新 RPC、不动 turn_usage 表结构与 session-debug 旁路。
+
+### 接口
+
+```ts
+// apps/zcode-cli/packages/contracts/src/events/session.events.ts（additive optional）
+TurnCompletePayload.workTiming?: {
+  modelRequestMs: number;   // Σ 模型请求 wall 时长（completed + failed）
+  toolExecutionMs: number;  // Σ 工具调用 duration（累计口径）
+};
+
+// apps/zcode-cli/packages/core/src/runtime/methods/usage-observability.ts
+aggregateTurnWorkTiming(events): { modelRequestMs: number; toolExecutionMs: number }
+
+// packages/shared/src/zcode-protocol-v4/rows.ts（additive optional）
+turnHeaderRowSchema.workTiming?: {
+  modelRequestMs: number; toolExecutionMs: number;
+}
+```
+
+### 验收场景
+
+- 完成一轮含工具调用的对话：主行显示 `已工作 X · 平均 Y token/s`；悬停与展开区显示 `本地执行 A · 模型请求 B · 模型期 C token/s`。
+- 运行中的轮：保持「工作中 {duration}」现状，不显示速率（workTiming 只在轮结束产生）。
+- 用户中途取消的轮（resultType:"cancelled"）同样带 workTiming 与速率。
+- 旧 CLI（payload 无 workTiming）与旧快照（rows 无 workTiming）：UI 回退现状文案，不报错。
+- 纯函数测试：聚合器（多请求/多工具累加、失败请求计入、缺 duration 跳过）、速率派生（任一时长 0 → 速率 undefined）、schema 旧数据兼容。

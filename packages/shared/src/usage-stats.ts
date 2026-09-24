@@ -238,6 +238,38 @@ export const appUsageToolUsageSchema = z.object({
   avgDurationMs: z.number().nullable(),
 });
 
+// ── Token 速率趋势（docs/specs/usage-stats-app-usage.md 第二版）──
+// 速率 = Σ output_tokens ÷ Σ 生成时长（首 token → 请求完成，与 composer 平均同口径）；
+// 桶内无有效模型请求时为 null（UI 显示 N/A，不是 0）。
+export const appUsageRateTrendPointSchema = z.object({
+  /** daily: "yyyy-MM-dd"；monthly: "yyyy-MM"。 */
+  key: z.string(),
+  avgTokensPerSecond: z.number().nullable(),
+  outputTokens: z.number(),
+  generationMs: z.number(),
+  /** Σ 模型请求 wall 时长（含首 token 等待，累计口径）。 */
+  modelRequestMs: z.number(),
+  /** Σ 工具执行时长（并行重复计入）。 */
+  toolExecutionMs: z.number(),
+});
+
+export const appUsageRateHourPointSchema = z.object({
+  /** 本地小时 0-23。 */
+  hour: z.number().int().min(0).max(23),
+  avgTokensPerSecond: z.number().nullable(),
+  outputTokens: z.number(),
+  generationMs: z.number(),
+  modelRequestMs: z.number(),
+  toolExecutionMs: z.number(),
+});
+
+export const appUsageRateTrendSchema = z.object({
+  daily: z.array(appUsageRateTrendPointSchema),
+  monthly: z.array(appUsageRateTrendPointSchema),
+  /** 仅当请求带 hourlyDate 时返回；否则 null。 */
+  hourly: z.object({ date: z.string(), hours: z.array(appUsageRateHourPointSchema) }).nullable(),
+});
+
 export const appUsageSnapshotSchema = z.object({
   range: z.enum(APP_USAGE_RANGES),
   generatedAt: z.number(),
@@ -248,6 +280,8 @@ export const appUsageSnapshotSchema = z.object({
   dailyModelUsage: z.array(appUsageDailyModelUsageSchema),
   models: z.array(appUsageModelUsageSchema),
   tools: z.array(appUsageToolUsageSchema),
+  /** additive：旧 CLI/旧快照缺省，UI 不渲染速率区。 */
+  rateTrend: appUsageRateTrendSchema.optional(),
 });
 
 export type AppUsageSummary = z.infer<typeof appUsageSummarySchema>;
@@ -258,6 +292,9 @@ export type AppUsageDailyModelItem = z.infer<typeof appUsageDailyModelItemSchema
 export type AppUsageDailyModelUsage = z.infer<typeof appUsageDailyModelUsageSchema>;
 export type AppUsageModelUsage = z.infer<typeof appUsageModelUsageSchema>;
 export type AppUsageToolUsage = z.infer<typeof appUsageToolUsageSchema>;
+export type AppUsageRateTrendPoint = z.infer<typeof appUsageRateTrendPointSchema>;
+export type AppUsageRateHourPoint = z.infer<typeof appUsageRateHourPointSchema>;
+export type AppUsageRateTrend = z.infer<typeof appUsageRateTrendSchema>;
 export type AppUsageFavoriteModel = z.infer<typeof appUsageFavoriteModelSchema>;
 export type AppUsageSnapshot = z.infer<typeof appUsageSnapshotSchema>;
 

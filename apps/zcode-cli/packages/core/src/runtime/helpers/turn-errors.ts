@@ -14,6 +14,7 @@ import {
   withErrorPayloadRole,
 } from "../../errors/error-payload.js";
 import { isModelContextExceededError } from "./model-errors.js";
+import { turnWorkTimingFromEvents } from "../methods/usage-observability.js";
 
 export { projectExecutionErrorPayload } from "../../errors/error-payload.js";
 
@@ -162,17 +163,20 @@ export async function appendTurnOutcomeEvent(
   const cancelled = coreError.type === CoreErrorType.TurnCancelled;
   const externalFault = findExternalTurnFault(coreError);
 
+  const cancelledUsage = cancelled ? createModelUsageSummaryFromEvents(events) : undefined;
   const outcomeEvent = cancelled
     ? runtime.createEvent(
         SessionEventType.TurnComplete,
         {
           response: "",
           tokenCount: 0,
-          usage: createModelUsageSummaryFromEvents(events),
+          usage: cancelledUsage,
           toolCallCount: 0,
           historyRoundCount: params.historyRoundCount ?? 0,
           duration: params.durationMs,
           resultType: "cancelled",
+          // 取消轮的中断前工时仍参与拆分统计（已完成请求/工具的时长已在事件流中）。
+          workTiming: turnWorkTimingFromEvents(events, cancelledUsage),
           inputId,
           ...(params.backgroundSubagentResultConsumed
             ? { backgroundSubagentResultConsumed: true }

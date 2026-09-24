@@ -222,6 +222,8 @@ export interface ZCodeAgentListSessionSubagentsParams extends ZCodeAgentSessionT
 export interface ZCodeAgentAppUsageParams {
   range: AppUsageRange;
   timeZone?: string;
+  /** 可选：请求该本地日（yyyy-MM-dd）的 24 小时速率桶。 */
+  hourlyDate?: string;
 }
 
 export interface ZCodeAgentTaskTokenUsageParams extends ZCodeAgentSessionTarget {}
