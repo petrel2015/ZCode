@@ -12,6 +12,7 @@ import {
   DropdownMenuItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuShortcut,
   DropdownMenuSub,
   DropdownMenuSubContent,
@@ -19,6 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu.js";
 import {
+  BarChart3,
   PencilRuler,
   Globe,
   Loader2,
@@ -34,6 +36,7 @@ import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { useShortcutCommandLabel } from "@/shortcuts/useShortcutBindings.js";
 import { useZCodeStore } from "@/store/StoreProvider.js";
 import { normalizeInterfaceMode } from "@/lib/interfaceMode.js";
+import { setPendingSettingsUsageIntent } from "@/lib/settingsNavigation.js";
 import type { Theme } from "@/useTheme.js";
 import { WorkspaceWebRemoteControlTrigger } from "@/WorkspaceWebRemoteControlTrigger.js";
 
@@ -307,10 +310,19 @@ export const WorkspaceSidebarFooter = memo(function WorkspaceSidebarFooterCompon
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
             ) : null}
-            {/* 升级入口状态不再以菜单开关为生命周期边界。*/}
-            {null}
-            {null}
-            {null}
+            {/* standalone 化时 UsageSummary 模块被整体删除，「使用统计」菜单项被连带误伤。
+                账号区块只恢复这一个纯菜单项：点击直达设置页 Usage 分区，不覆盖用户上次查看的统计 tab；
+                「升级」「邀请好友」已随平台账号体系移除，不再返回，升级入口的生命周期不再挂在菜单开关上。 */}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={() => {
+                setPendingSettingsUsageIntent();
+                onSettingsButtonClick?.();
+              }}
+            >
+              <BarChart3 className="size-4" />
+              {intl.formatMessage({ id: "sidebar.usage.plan.openStats" })}
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
         <div className="flex shrink-0 items-center gap-1.5">
