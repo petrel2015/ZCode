@@ -158,6 +158,7 @@
         aria-label="Loading..."
       >
         <div class="zcode-boot-loading__logo-shell">
+          <!-- 战损 Z（叛忍刀痕简化版）：与 ZCodeAboutLogo 共用同一份路径数据（spec 品牌渲染点登记表）。 -->
           <svg
             xmlns="http://www.w3.org/2000/svg"
             width="118px"
@@ -167,9 +168,45 @@
             class="zcode-boot-loading__logo"
             aria-hidden="true"
           >
-            <path
-              fill="currentColor"
-              d="M134.4 0.130152L116.48 25.6022C113.665 29.5699 109.054 32.0019 104.064 32.0019H6.3999V0C6.3999 0.130149 134.4 0.130152 134.4 0.130152Z"
+            <mask
+              id="zcode-battle-z-cutouts-web"
+              maskUnits="userSpaceOnUse"
+              x="0"
+              y="0"
+              width="1024"
+              height="1024"
+            >
+              <rect x="0" y="0" width="1024" height="1024" fill="white" />
+              <g transform="translate(512,512) skewX(-12) translate(-280,-280)">
+                <rect
+                  x="70"
+                  y="121"
+                  width="660"
+                  height="18"
+                  fill="black"
+                  transform="rotate(-37.97 400 130)"
+                />
+                <rect
+                  x="-170"
+                  y="421"
+                  width="660"
+                  height="18"
+                  fill="black"
+                  transform="rotate(-37.97 160 430)"
+                />
+              </g>
+              <g transform="translate(512,500) rotate(-6)">
+                <path
+                  d="M-310,-29 L220,-29 L310,0 L-220,29 L-258,9 L-214,2 L-284,-2 L-304,7 L-294,0 Z"
+                  fill="black"
+                  stroke="black"
+                  stroke-width="60"
+                />
+              </g>
+            </mask>
+            <g
+              transform="translate(-63,-82) scale(0.373)"
+              mask="url(#zcode-battle-z-cutouts-web)"
             >
               <animate
                 attributeName="opacity"
@@ -177,27 +214,13 @@
                 repeatCount="indefinite"
                 values="1;0.3;1"
               />
-            </path>
-            <path fill="currentColor" d="M256 0.130127L102.401 217.732H0L153.599 0.130127H256Z">
-              <animate
-                attributeName="opacity"
-                begin="0.75s"
-                dur="1.5s"
-                repeatCount="indefinite"
-                values="1;0.3;1"
-              />
-            </path>
-            <path
-              fill="currentColor"
-              d="M121.601 217.732L139.65 192.134C142.465 188.166 147.076 185.734 152.067 185.734H249.604V217.736H121.601V217.732Z"
-            >
-              <animate
-                attributeName="opacity"
-                dur="1.5s"
-                repeatCount="indefinite"
-                values="1;0.3;1"
-              />
-            </path>
+              <g transform="translate(512,512) skewX(-12) translate(-280,-280)">
+                <path
+                  fill="currentColor"
+                  d="M0,0 L560,0 L560,120 L150,440 L560,440 L560,560 L0,560 L0,440 L410,120 L0,120 Z"
+                />
+              </g>
+            </g>
           </svg>
         </div>
       </div>

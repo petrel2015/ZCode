@@ -1,17 +1,26 @@
-// 从 build/logo/ 下的 SVG 源重生成全部打包图标资产（macOS 工具链：Chrome headless 渲染 + sips 缩放 + iconutil）。
-// 仅在更新 logo 源时手动运行；CI 与打包流程直接消费 build/ 下的静态资产，不在构建期生成。
+// 从 build/logo/ 下的 SVG 源重生成全部品牌资产（macOS 工具链：Chrome headless 渲染 + sips 缩放 + iconutil）。
+// 仅在更新 logo 源时手动运行；CI 与打包流程直接消费静态资产，不在构建期生成。
 //
 // 变体规则（见 docs/specs/standalone-identity-branding.md）：
 // - standalone-mark.svg：完整战损版，用于 ≥128px 的所有场景；
 // - standalone-mark-small.svg：简化版（无战损细节、短横道），用于 ≤64px，保证小尺寸可辨。
+//
+// 覆盖范围（对应 spec 的品牌渲染点登记表）：
+// - build/icon.*、icon_installer.*、icon_windows.png、build/icons/：打包用 app/安装器图标；
+// - build/dmg_background.png / dmg_background@2x.png：DMG 安装背景，源自 build/logo/dmg_background.svg；
+// - 仓库根 public/icon_512@2x.png：更新对话框 Dock 图标（1024×1024）；
+// - 仓库根 public/logo/icons/：静态存档镜像，与 build/ 产物保持一致；
+// - packages/web/public/favicon.ico：Web favicon（多尺寸 ICO，≤64px 尺寸用简化变体；dist/ 下同名产物属构建输出，不手改）。
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 const desktopRoot = resolve(import.meta.dirname, "..");
+const repoRoot = resolve(desktopRoot, "..", "..");
 const logoFull = join(desktopRoot, "build", "logo", "standalone-mark.svg");
 const logoSmall = join(desktopRoot, "build", "logo", "standalone-mark-small.svg");
+const dmgBackground = join(desktopRoot, "build", "logo", "dmg_background.svg");
 
 const CHROME_CANDIDATES = [
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
@@ -31,14 +40,14 @@ function run(cmd, args, options = {}) {
   execFileSync(cmd, args, { stdio: "inherit", ...options });
 }
 
-function renderSvgToPng(chrome, svgPath, outPath) {
+function renderSvgToPng(chrome, svgPath, outPath, width = 1024, height = 1024) {
   run(chrome, [
     "--headless",
     "--disable-gpu",
     "--hide-scrollbars",
     "--default-background-color=00000000",
     `--screenshot=${outPath}`,
-    "--window-size=1024,1024",
+    `--window-size=${width},${height}`,
     `file://${svgPath}`,
   ]);
 }
@@ -140,6 +149,25 @@ function main() {
   for (const size of allSizes) {
     run("cp", [sizeToFile.get(size), join(buildDir, "icons", `${size}x${size}.png`)]);
   }
+
+  // 4) DMG 安装背景：SVG 源按 1080x760 渲染出 @2x，再缩放出 540x380 @1x（白底不透明，无 alpha 要求）
+  const dmg2x = join(workDir, "dmg-background-2x.png");
+  renderSvgToPng(chrome, dmgBackground, dmg2x, 1080, 760);
+  run("cp", [dmg2x, join(buildDir, "dmg_background@2x.png")]);
+  run("sips", ["-z", "380", "540", dmg2x, "--out", join(buildDir, "dmg_background.png")]);
+
+  // 5) 仓库根 public/ 静态存档：更新对话框 Dock 图标 + logo/icons 全套镜像（与 build/ 产物一致）
+  const publicIconsDir = join(repoRoot, "public", "logo", "icons");
+  mkdirSync(publicIconsDir, { recursive: true });
+  run("cp", [sizeToFile.get(1024), join(repoRoot, "public", "icon_512@2x.png")]);
+  run("cp", [join(buildDir, "icon.icns"), join(publicIconsDir, "icon.icns")]);
+  run("cp", [join(buildDir, "icon.ico"), join(publicIconsDir, "icon.ico")]);
+  for (const size of allSizes) {
+    run("cp", [sizeToFile.get(size), join(publicIconsDir, `${size}x${size}.png`)]);
+  }
+
+  // 6) Web favicon：多尺寸 ICO，尺寸集与 build/icon.ico 一致（≤64px 来自简化变体）
+  buildIco(sizeToFile, join(repoRoot, "packages", "web", "public", "favicon.ico"));
 
   rmSync(workDir, { recursive: true, force: true });
   console.log("[icon-assets] 全部图标已重新生成");
