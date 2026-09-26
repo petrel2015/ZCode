@@ -5,6 +5,7 @@ import type { AppUsageQueryResult } from "../../../apps/zcode-cli/packages/contr
 import { buildAppUsageSnapshot } from "../../../apps/zcode-cli/packages/bootstrap/src/zcode-protocol/usage-stats-builder.js";
 import {
   buildAppUsageRateTrendRows,
+  buildAppUsageRateTrendViewModel,
   resolveDefaultHourlyDate,
 } from "../src/settings/usage-stats/AppUsageRateTrendChart.js";
 import type { AppUsageSnapshot } from "@zcode/shared";
@@ -240,4 +241,123 @@ test("resolveDefaultHourlyDate picks the latest active day", () => {
   // 无历史时回退今天（本地日期），保证首开「时」粒度不空白报错。
   const today = resolveDefaultHourlyDate(undefined);
   assert.match(today, /^\d{4}-\d{2}-\d{2}$/);
+});
+
+test("buildAppUsageSnapshot splits per-model rate series by provider and model", () => {
+  const until = DAY_MS - 1;
+  const snapshot = buildAppUsageSnapshot(
+    {
+      ...emptyQueryResult([
+        {
+          dayIndex: 0,
+          outputTokens: 200,
+          generationMs: 10_000,
+          modelRequestMs: 12_000,
+          toolExecutionMs: 0,
+        },
+      ]),
+      // 两个模型各 100 tokens / 5s → 各 20 token/s；整体 200/10s = 20。
+      rateModels: [
+        {
+          dayIndex: 0,
+          providerId: "bigmodel",
+          modelId: "glm-5.3",
+          outputTokens: 100,
+          generationMs: 5_000,
+          modelRequestMs: 6_000,
+        },
+        {
+          dayIndex: 0,
+          providerId: "zai",
+          modelId: "glm-4.7",
+          outputTokens: 100,
+          generationMs: 5_000,
+          modelRequestMs: 6_000,
+        },
+      ],
+    },
+    { range: "7d", timeZone: "UTC", tzOffsetMs: 0, generatedAt: until, since: 0, until },
+  );
+  const dayModels = snapshot.rateTrend?.daily[0]?.models ?? [];
+  assert.equal(dayModels.length, 2);
+  assert.ok(dayModels.every((m) => m.avgTokensPerSecond === 20));
+  assert.deepEqual(dayModels.map((m) => `${m.providerId}/${m.modelId}`).sort(), [
+    "bigmodel/glm-5.3",
+    "zai/glm-4.7",
+  ]);
+  // 月度按天加权聚合模型明细。
+  const monthModels = snapshot.rateTrend?.monthly[0]?.models ?? [];
+  assert.equal(monthModels.length, 2);
+  assert.ok(monthModels.every((m) => m.outputTokens === 100 && m.avgTokensPerSecond === 20));
+  // 缺 rateModels（旧 store）不产出 models 字段。
+  const legacy = buildAppUsageSnapshot(emptyQueryResult([]), {
+    range: "7d",
+    timeZone: "UTC",
+    tzOffsetMs: 0,
+    generatedAt: until,
+    since: 0,
+    until,
+  });
+  assert.equal(legacy.rateTrend?.daily[0]?.models, undefined);
+});
+
+test("buildAppUsageRateTrendViewModel builds overall + top model series", () => {
+  const snapshot = {
+    rateTrend: {
+      daily: [
+        {
+          key: "2026-09-25",
+          avgTokensPerSecond: 20,
+          outputTokens: 200,
+          generationMs: 10_000,
+          modelRequestMs: 12_000,
+          toolExecutionMs: 0,
+          models: [
+            {
+              providerId: "bigmodel",
+              modelId: "glm-5.3",
+              avgTokensPerSecond: 30,
+              outputTokens: 150,
+              generationMs: 5_000,
+              modelRequestMs: 6_000,
+            },
+            {
+              providerId: "zai",
+              modelId: "glm-4.7",
+              avgTokensPerSecond: 10,
+              outputTokens: 50,
+              generationMs: 5_000,
+              modelRequestMs: 6_000,
+            },
+          ],
+        },
+        {
+          key: "2026-09-26",
+          avgTokensPerSecond: null,
+          outputTokens: 0,
+          generationMs: 0,
+          modelRequestMs: 0,
+          toolExecutionMs: 0,
+        },
+      ],
+      monthly: [],
+      hourly: null,
+    },
+  } as unknown as AppUsageSnapshot;
+  const { rows, modelSeries } = buildAppUsageRateTrendViewModel({
+    granularity: "day",
+    snapshot,
+    locale: "zh-CN",
+    resolveModelLabel: (modelId) => modelId ?? "",
+  });
+  // Top N：glm-5.3 tokens 高在前；两模型都有序列。
+  assert.equal(modelSeries.length, 2);
+  assert.equal(modelSeries[0]?.key, "m0");
+  assert.equal(modelSeries[0]?.modelId, "glm-5.3");
+  assert.equal(modelSeries[0]?.label, "bigmodel / glm-5.3");
+  // 每行携带 per-model 速率；空日模型速率为 null（断点）。
+  assert.equal(rows[0]?.modelRates.m0, 30);
+  assert.equal(rows[0]?.modelRates.m1, 10);
+  assert.equal(rows[1]?.modelRates.m0, null);
+  assert.equal(rows[1]?.modelRates.m1, null);
 });

@@ -241,6 +241,15 @@ export const appUsageToolUsageSchema = z.object({
 // ── Token 速率趋势（docs/specs/usage-stats-app-usage.md 第二版）──
 // 速率 = Σ output_tokens ÷ Σ 生成时长（首 token → 请求完成，与 composer 平均同口径）；
 // 桶内无有效模型请求时为 null（UI 显示 N/A，不是 0）。
+export const appUsageRateModelPointSchema = z.object({
+  providerId: z.string(),
+  modelId: z.string(),
+  avgTokensPerSecond: z.number().nullable(),
+  outputTokens: z.number(),
+  generationMs: z.number(),
+  modelRequestMs: z.number(),
+});
+
 export const appUsageRateTrendPointSchema = z.object({
   /** daily: "yyyy-MM-dd"；monthly: "yyyy-MM"。 */
   key: z.string(),
@@ -251,6 +260,8 @@ export const appUsageRateTrendPointSchema = z.object({
   modelRequestMs: z.number(),
   /** Σ 工具执行时长（并行重复计入）。 */
   toolExecutionMs: z.number(),
+  /** 按模型拆分（provider+model）；桶内该模型无请求时不在列表中。additive。 */
+  models: z.array(appUsageRateModelPointSchema).optional(),
 });
 
 export const appUsageRateHourPointSchema = z.object({
@@ -261,6 +272,8 @@ export const appUsageRateHourPointSchema = z.object({
   generationMs: z.number(),
   modelRequestMs: z.number(),
   toolExecutionMs: z.number(),
+  /** 按模型拆分；additive，与天/月粒度同形。 */
+  models: z.array(appUsageRateModelPointSchema).optional(),
 });
 
 export const appUsageRateTrendSchema = z.object({
@@ -294,6 +307,7 @@ export type AppUsageModelUsage = z.infer<typeof appUsageModelUsageSchema>;
 export type AppUsageToolUsage = z.infer<typeof appUsageToolUsageSchema>;
 export type AppUsageRateTrendPoint = z.infer<typeof appUsageRateTrendPointSchema>;
 export type AppUsageRateHourPoint = z.infer<typeof appUsageRateHourPointSchema>;
+export type AppUsageRateModelPoint = z.infer<typeof appUsageRateModelPointSchema>;
 export type AppUsageRateTrend = z.infer<typeof appUsageRateTrendSchema>;
 export type AppUsageFavoriteModel = z.infer<typeof appUsageFavoriteModelSchema>;
 export type AppUsageSnapshot = z.infer<typeof appUsageSnapshotSchema>;

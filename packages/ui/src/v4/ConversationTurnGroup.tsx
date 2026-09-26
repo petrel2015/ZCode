@@ -94,6 +94,7 @@ import type {
   ConversationTurnWorkSegment,
 } from "@/v4/conversationTurnRenderUnits.js";
 import {
+  formatCompactTokenCount,
   formatConversationWorkDuration,
   formatConversationWorkedForLabel,
   formatConversationWorkTimingDetail,
@@ -618,7 +619,7 @@ function RunningTurnLiveRate({
   rows: readonly AssistantWorkRow[];
   runningDurationMs: number | undefined;
 }) {
-  const { intl } = useZCodeIntl();
+  const { intl, locale } = useZCodeIntl();
   const live = useStreamingRowTokenRate(rows);
   const facts = useContext(ConversationRunningWorkRateContext);
   const liveLabel = formatTokenRateReadings(live, null).live;
@@ -631,12 +632,22 @@ function RunningTurnLiveRate({
     intl,
   );
   const thinkLabel = formatRateReading(facts?.modelAvgTokensPerSecond ?? null, intl);
+  const cumulativeLabel =
+    facts?.cumulativeOutputTokens !== undefined && facts.cumulativeOutputTokens > 0
+      ? intl.formatMessage(
+          { id: "chat.history.sessionTokens" },
+          {
+            tokens: formatCompactTokenCount(facts.cumulativeOutputTokens, locale),
+          },
+        )
+      : null;
   return (
     <span className="truncate">
       {intl.formatMessage(
         { id: "chat.history.runningRates" },
         { live: liveLabel, avg: avgLabel, think: thinkLabel },
       )}
+      {cumulativeLabel ? ` · ${cumulativeLabel}` : ""}
     </span>
   );
 }
@@ -644,9 +655,12 @@ function RunningTurnLiveRate({
 function AssistantHistoryStatus({
   segment,
   open,
+  showSessionTokens = false,
 }: {
   segment: ConversationTurnWorkSegment;
   open: boolean;
+  /** 仅最新轮的最后一个工作段为 true：主行追加会话累计 tokens（历史轮只显示本轮消耗）。 */
+  showSessionTokens?: boolean;
 }) {
   const { intl, locale } = useZCodeIntl();
   const durationLabel = formatConversationWorkDuration(
@@ -655,11 +669,17 @@ function AssistantHistoryStatus({
     locale,
   );
   const isRunning = segment.workStatus?.state === "running";
-  // 完成后主行直接写双速率（整体 + 思考），拆分明细保留在悬停/展开区
+  const sessionFacts = useContext(ConversationRunningWorkRateContext);
+  // 完成后主行直接写双速率（整体 + 思考）+ 本轮消耗，拆分明细保留在悬停/展开区
   // （docs/specs/session-token-throughput.md 第三版）。
   const workedLabel = isRunning
     ? null
-    : formatConversationWorkedForLabel(segment.workStatus, intl, locale);
+    : formatConversationWorkedForLabel(
+        segment.workStatus,
+        intl,
+        locale,
+        showSessionTokens ? sessionFacts?.cumulativeOutputTokens : undefined,
+      );
   const timingDetail = formatConversationWorkTimingDetail(segment.workStatus, intl, locale);
   const label =
     segment.workStatus?.state === "interrupted"
@@ -722,6 +742,7 @@ function ConversationWorkSegmentFlow({
   canRetryLatestAssistant,
   shareSelectionToggle,
   shareSelectionRowId,
+  showSessionTokens,
 }: {
   segment: ConversationTurnWorkSegment;
   context: ConversationRowRenderContext;
@@ -738,6 +759,7 @@ function ConversationWorkSegmentFlow({
   canRetryLatestAssistant: boolean;
   shareSelectionToggle?: ReactNode;
   shareSelectionRowId?: number;
+  showSessionTokens?: boolean;
 }) {
   const [historyOpen, setHistoryOpen] = useState(segment.assistantHistoryDefaultOpen);
   useEffect(() => {
@@ -851,13 +873,23 @@ function ConversationWorkSegmentFlow({
 
         return (
           <Fragment key={itemKey}>
-            {showHistoryStatus ? <AssistantHistoryStatus segment={segment} open={open} /> : null}
+            {showHistoryStatus ? (
+              <AssistantHistoryStatus
+                segment={segment}
+                open={open}
+                showSessionTokens={showSessionTokens}
+              />
+            ) : null}
             {content}
           </Fragment>
         );
       })}
       {shouldShowHistoryStatus && firstAssistantFlowItemIndex < 0 ? (
-        <AssistantHistoryStatus segment={segment} open={open} />
+        <AssistantHistoryStatus
+          segment={segment}
+          open={open}
+          showSessionTokens={showSessionTokens}
+        />
       ) : null}
     </Collapsible>
   );
@@ -968,7 +1000,7 @@ function ConversationTurnFlow({
   // Collapsible。accepted guide 现在由 CLI workSegments 定界，每段组件自行维护折叠状态。
   return (
     <div className="flex flex-col gap-5">
-      {workSegments.map((segment) => (
+      {workSegments.map((segment, segmentIndex) => (
         <ConversationWorkSegmentFlow
           key={segment.key}
           segment={segment}
@@ -986,6 +1018,8 @@ function ConversationTurnFlow({
           canRetryLatestAssistant={canRetryLatestAssistant}
           shareSelectionToggle={shareSelectionToggle}
           shareSelectionRowId={shareSelectionRowId}
+          // 会话累计 tokens 只标最新轮的最后一个工作段；历史轮只显示各自的本轮消耗。
+          showSessionTokens={unit.isLastTurn && segmentIndex === workSegments.length - 1}
         />
       ))}
       <TurnChatLoadingSlot apiRetry={apiRetry} eligible={showLoading} />

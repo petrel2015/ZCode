@@ -3436,6 +3436,7 @@ const zhCN: Record<string, string> = {
   "settings.usage.heatmap.range.cumulative": "累计",
   "settings.usage.dailyChartTitle": "每日 Token 趋势图",
   "settings.usage.rateTrend.title": "Token 速率趋势",
+  "settings.usage.rateTrend.overallLegend": "整体",
   "settings.usage.rateTrend.granularity.day": "每天",
   "settings.usage.rateTrend.granularity.month": "每月",
   "settings.usage.rateTrend.granularity.hour": "每小时",
@@ -4337,6 +4338,8 @@ const zhCN: Record<string, string> = {
   "chat.history.runningRatesHint":
     "平均为自会话开始的活跃工时口径（排除输入等待）；思考为会话累计生成时段口径（与输入框「平均」同源）。本轮结束后均切换为本轮数据",
   "chat.history.ratePending": "—",
+  "chat.history.turnTokens": "本轮 {tokens} tokens",
+  "chat.history.sessionTokens": "会话累计 {tokens}",
   "chat.history.workTimingDetail":
     "本地执行 {local} · 模型请求 {model} · 思考 {modelRate} token/s（并行时段累计）",
   "chat.history.workTimingBreakdown": "本地执行 {local} · 模型请求 {model}（并行时段累计）",

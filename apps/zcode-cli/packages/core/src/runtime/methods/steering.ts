@@ -1082,12 +1082,18 @@ export async function emitModelSelected(
   },
 ): Promise<void> {
   const model = options.model ?? createRuntimeModel(this, { selection: options.modelSelection });
+  // registry sparse schema 允许 contextWindow 为 null（自定义/个人模型未声明窗口）。
+  // null 会被投影当作“显式清除”整体清空 context usage 指示器且不可恢复，因此这里
+  // 收敛语义：未知窗口不下发该字段（缺席 = 投影兼容 no-op）。
+  const selectedContextWindow = model.properties.contextWindow;
   const event = createSessionEvent(
     SessionEventType.ModelSelected,
     this.sessionId,
     {
       // 模型切换事件必须从本次创建的 Active Model 读取窗口，不能再复制 Runtime Config。
-      contextWindow: model.properties.contextWindow,
+      ...(selectedContextWindow === null || selectedContextWindow === undefined
+        ? {}
+        : { contextWindow: selectedContextWindow }),
       modelSelection: cloneModelSelection(options.modelSelection),
       ...(options.effectiveReasoningLevel
         ? { effectiveReasoningLevel: options.effectiveReasoningLevel }

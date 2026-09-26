@@ -610,7 +610,11 @@ async function runModelBackedTurnStepImpl(
       // 桌面 continuous 实时事件只携带当前 model_complete payload。
       // 如果主轮次只发 usage 不发 contextWindow，旧 task stream 无法生成 usage_update，
       // 长程任务中输入栏会拿不到 context meter 的 size 而隐藏。
-      ...(querySource === "main_turn" && executionContextWindow !== undefined
+      // null（模型未声明窗口）与缺席等价处理：显式下发 null 会被投影当作“显式清除”
+      // 整体清空 context usage 且此后无法恢复（docs/specs/session-token-throughput.md）。
+      ...(querySource === "main_turn" &&
+      executionContextWindow !== undefined &&
+      executionContextWindow !== null
         ? { contextWindow: executionContextWindow }
         : {}),
       querySource,
