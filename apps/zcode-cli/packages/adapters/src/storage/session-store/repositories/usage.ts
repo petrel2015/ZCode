@@ -6,6 +6,7 @@ import type {
   AppUsageQueryInput,
   AppUsageQueryResult,
   AppUsageRateDayRow,
+  AppUsageRateModelRow,
   AppUsageRateHourRow,
   AppUsageToolRow,
   TaskUsageQueryInput,
@@ -179,6 +180,87 @@ function mergeDetailHoursIntoRollup(
       row.turnCount,
     );
   }
+
+  // 按模型的小时汇总（0024）：同一水位、同批合并，趋势图按 provider+model 拆分速率。
+  const modelHours = new Map<
+    string,
+    { hourIndex: number; providerId: string; modelId: string; outputTokens: number; totalTokens: number; generationMs: number; modelRequestMs: number; modelRequestCount: number }
+  >();
+  const modelRowOf = (hourIndex: number, providerId: string, modelId: string) => {
+    const key = `${hourIndex}\u0000${providerId}\u0000${modelId}`;
+    let row = modelHours.get(key);
+    if (!row) {
+      row = {
+        hourIndex,
+        providerId,
+        modelId,
+        outputTokens: 0,
+        totalTokens: 0,
+        generationMs: 0,
+        modelRequestMs: 0,
+        modelRequestCount: 0,
+      };
+      modelHours.set(key, row);
+    }
+    return row;
+  };
+  const modelDetailRows = db
+    .prepare(
+      `select
+         cast(started_at / ${HOUR_MS} as integer) as hourIndex,
+         provider_id as providerId,
+         model_id as modelId,
+         coalesce(sum(output_tokens), 0) as outputTokens,
+         coalesce(sum(computed_total_tokens), 0) as totalTokens,
+         coalesce(sum(
+           case when first_token_at is not null and completed_at is not null
+                  and completed_at > first_token_at
+                then completed_at - first_token_at else 0 end
+         ), 0) as generationMs,
+         coalesce(sum(duration_ms), 0) as modelRequestMs,
+         count(*) as modelRequestCount
+       from model_usage
+       where started_at >= ? and started_at < ?
+       group by hourIndex, providerId, modelId`,
+    )
+    .all(fromMs, toMs) as Array<{
+    hourIndex: number | bigint;
+    providerId: string | null;
+    modelId: string | null;
+    outputTokens: number | bigint;
+    totalTokens: number | bigint;
+    generationMs: number | bigint;
+    modelRequestMs: number | bigint;
+    modelRequestCount: number | bigint;
+  }>;
+  for (const r of modelDetailRows) {
+    const providerId = r.providerId ?? "unknown";
+    const modelId = r.modelId ?? "unknown";
+    const row = modelRowOf(Number(r.hourIndex), providerId, modelId);
+    row.outputTokens += Number(r.outputTokens);
+    row.totalTokens += Number(r.totalTokens);
+    row.generationMs += Number(r.generationMs);
+    row.modelRequestMs += Number(r.modelRequestMs);
+    row.modelRequestCount += Number(r.modelRequestCount);
+  }
+  const insertModel = db.prepare(
+    `insert or replace into usage_rollup_hourly_model (
+       hour_index, provider_id, model_id, output_tokens, total_tokens,
+       generation_ms, model_request_ms, model_request_count
+     ) values (?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  for (const row of modelHours.values()) {
+    insertModel.run(
+      row.hourIndex,
+      row.providerId,
+      row.modelId,
+      row.outputTokens,
+      row.totalTokens,
+      row.generationMs,
+      row.modelRequestMs,
+      row.modelRequestCount,
+    );
+  }
 }
 
 /**
@@ -203,6 +285,7 @@ export function refreshUsageRollupHourly(db: DatabaseSync): void {
       mergeDetailHoursIntoRollup(db, watermark + 1, cutoffHour + 1);
     }
     db.prepare("delete from usage_rollup_hourly where hour_index > ?").run(cutoffHour);
+    db.prepare("delete from usage_rollup_hourly_model where hour_index > ?").run(cutoffHour);
     mergeDetailHoursIntoRollup(db, cutoffHour + 1, nowHour + 1);
     db.exec("commit");
   } catch (error) {
@@ -822,6 +905,64 @@ export async function queryAppUsage(
     }
   }
 
+  // 按模型拆分的速率事实（rollup 模型表，同一本地日帧过滤）。请求 hourlyDate 时
+  // 以本地小时为桶（与 rateHours 对齐），否则以本地日为桶（与 rateDays 对齐）。
+  const hourlyDateMs = input.hourlyDate ? Date.parse(`${input.hourlyDate}T00:00:00Z`) : Number.NaN;
+  const rateModelRows = db
+    .prepare(
+      `select
+         hour_index as hourIndex,
+         provider_id as providerId,
+         model_id as modelId,
+         output_tokens as outputTokens,
+         generation_ms as generationMs,
+         model_request_ms as modelRequestMs
+       from usage_rollup_hourly_model
+       where cast((hour_index * ${HOUR_MS} + ?) / ${DAY_MS} as integer) >= ?
+         and cast((hour_index * ${HOUR_MS} + ?) / ${DAY_MS} as integer) <= ?`,
+    )
+    .all(tzOffsetMs, rateStartDayIndex, tzOffsetMs, rateEndDayIndex) as Array<{
+    hourIndex: number | bigint;
+    providerId: string;
+    modelId: string;
+    outputTokens: number | bigint;
+    generationMs: number | bigint;
+    modelRequestMs: number | bigint;
+  }>;
+  const rateModelMap = new Map<string, AppUsageRateModelRow>();
+  for (const row of rateModelRows) {
+    const hourIndex = Number(row.hourIndex);
+    let dayIndex: number | undefined;
+    let hour: number | undefined;
+    let bucketKey: string;
+    if (input.hourlyDate && Number.isFinite(hourlyDateMs)) {
+      const localHour = Math.floor((hourIndex * HOUR_MS + tzOffsetMs - hourlyDateMs) / HOUR_MS);
+      if (localHour < 0 || localHour >= 24) continue;
+      hour = localHour;
+      bucketKey = `h${localHour}`;
+    } else {
+      dayIndex = Math.floor((hourIndex * HOUR_MS + tzOffsetMs) / DAY_MS);
+      bucketKey = `d${dayIndex}`;
+    }
+    const key = `${bucketKey}\u0000${row.providerId}\u0000${row.modelId}`;
+    const existing = rateModelMap.get(key);
+    if (existing) {
+      existing.outputTokens += Number(row.outputTokens);
+      existing.generationMs += Number(row.generationMs);
+      existing.modelRequestMs += Number(row.modelRequestMs);
+    } else {
+      rateModelMap.set(key, {
+        ...(dayIndex !== undefined ? { dayIndex } : {}),
+        ...(hour !== undefined ? { hour } : {}),
+        providerId: row.providerId,
+        modelId: row.modelId,
+        outputTokens: Number(row.outputTokens),
+        generationMs: Number(row.generationMs),
+        modelRequestMs: Number(row.modelRequestMs),
+      });
+    }
+  }
+
   return {
     totals: {
       totalTokens: Number(totals.totalTokens ?? 0),
@@ -867,6 +1008,7 @@ export async function queryAppUsage(
     })),
     rateDays: [...rateDayMap.values()].sort((a, b) => a.dayIndex - b.dayIndex),
     ...(rateHours ? { rateHours } : {}),
+    rateModels: [...rateModelMap.values()],
   };
 }
 

@@ -49,34 +49,77 @@ function formatTimingDuration(durationMs: number, intl: IntlInstance, locale: Lo
   return formatDurationUnit(0, "chat.history.duration.second", intl, locale);
 }
 
+/** token 数紧凑文案（1.2k / 3.4M，跟随 locale）；无Intl compact 支持时回退千分位。 */
+export function formatCompactTokenCount(tokens: number, locale: Locale): string {
+  try {
+    return new Intl.NumberFormat(locale, { notation: "compact", maximumFractionDigits: 1 }).format(
+      tokens,
+    );
+  } catch {
+    return tokens.toLocaleString(locale);
+  }
+}
+
 /**
- * 完成态轮历史的完整主行文案：已工作 {duration} · 整体 {r1} · 思考 {r2} token/s。
- * 双速率直接常驻主行（用户要求不藏悬停）；任一速率缺事实时降级为单速率/纯时长。
+ * 完成态轮历史的完整主行文案：已工作 {duration} · 整体 {r1} · 思考 {r2} token/s
+ * · 本轮 {tokens}。双速率直接常驻主行（用户要求不藏悬停）；任一速率缺事实时降级
+ * 为单速率/纯时长。本轮消耗取 workTiming.outputTokens（output 口径），缺事实不追加。
  * 运行中与无时长（null）由调用方另行处理，不在此分支。
  */
 export function formatConversationWorkedForLabel(
   workStatus: ConversationTurnWorkStatus | undefined,
   intl: IntlInstance,
   locale: Locale,
+  sessionCumulativeTokens?: number,
 ): string | null {
   const duration = formatConversationWorkDuration(workStatus?.durationMs, intl, locale);
   if (!workStatus || !duration) return null;
   const rates = resolveConversationTurnWorkRates(workStatus);
   const overall = rates.overallTokensPerSecond?.toFixed(1);
   const model = rates.modelTokensPerSecond?.toFixed(1);
-  if (overall !== undefined && model !== undefined) {
-    return intl.formatMessage({ id: "chat.history.workedForRates" }, { duration, overall, model });
-  }
-  if (overall !== undefined) {
-    return intl.formatMessage(
-      { id: "chat.history.workedForWithRate" },
-      { duration, rate: overall },
+  const label =
+    overall !== undefined && model !== undefined
+      ? intl.formatMessage({ id: "chat.history.workedForRates" }, { duration, overall, model })
+      : overall !== undefined
+        ? intl.formatMessage({ id: "chat.history.workedForWithRate" }, { duration, rate: overall })
+        : model !== undefined
+          ? intl.formatMessage({ id: "chat.history.workedForModelRate" }, { duration, rate: model })
+          : intl.formatMessage({ id: "chat.history.workedFor" }, { duration });
+  return appendTokenSegments(
+    label,
+    workStatus.workTiming?.outputTokens,
+    intl,
+    locale,
+    sessionCumulativeTokens,
+  );
+}
+
+/** 主行追加「本轮 X tokens（会话累计 Y）」段；缺事实的段不追加（不显示 0）。 */
+function appendTokenSegments(
+  label: string,
+  turnTokens: number | undefined,
+  intl: IntlInstance,
+  locale: Locale,
+  sessionCumulativeTokens?: number,
+): string {
+  const segments: string[] = [];
+  if (turnTokens !== undefined && turnTokens > 0) {
+    segments.push(
+      intl.formatMessage(
+        { id: "chat.history.turnTokens" },
+        { tokens: formatCompactTokenCount(turnTokens, locale) },
+      ),
     );
   }
-  if (model !== undefined) {
-    return intl.formatMessage({ id: "chat.history.workedForModelRate" }, { duration, rate: model });
+  if (sessionCumulativeTokens !== undefined && sessionCumulativeTokens > 0) {
+    segments.push(
+      intl.formatMessage(
+        { id: "chat.history.sessionTokens" },
+        { tokens: formatCompactTokenCount(sessionCumulativeTokens, locale) },
+      ),
+    );
   }
-  return intl.formatMessage({ id: "chat.history.workedFor" }, { duration });
+  return segments.length > 0 ? `${label} · ${segments.join(" · ")}` : label;
 }
 
 /**

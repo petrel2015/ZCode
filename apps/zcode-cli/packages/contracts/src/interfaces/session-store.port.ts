@@ -1063,6 +1063,17 @@ export interface AppUsageRateHourRow {
   toolExecutionMs: number;
 }
 
+/** 按模型（provider+model）拆分的速率事实，与 rateDays/rateHours 同口径。 */
+export interface AppUsageRateModelRow {
+  dayIndex?: number;
+  hour?: number;
+  providerId: string;
+  modelId: string;
+  outputTokens: number;
+  generationMs: number;
+  modelRequestMs: number;
+}
+
 export interface AppUsageQueryResult {
   totals: AppUsageTotalsRow;
   turnTotals: AppUsageTurnTotalsRow;
@@ -1075,6 +1086,8 @@ export interface AppUsageQueryResult {
   rateDays: AppUsageRateDayRow[];
   /** 仅当输入 hourlyDate 给定时返回该日 24 桶；缺省不请求。 */
   rateHours?: AppUsageRateHourRow[];
+  /** 按模型拆分的速率事实（dayIndex 与 rateDays 对齐；hourlyDate 请求时给 hour）。 */
+  rateModels: AppUsageRateModelRow[];
 }
 
 export interface TaskUsageQueryInput {

@@ -1,6 +1,6 @@
 # Session token throughput（会话 token 效率）
 
-Status: spec；实现随本 spec 落地（第二版：composer 双表盘常驻；第三版：轮级工时拆分 workTiming）。
+Status: spec；实现随本 spec 落地（第二版：composer 双表盘常驻；第三版：轮级工时拆分 workTiming + 运行中实时/平均/思考读数 + 会话 token 消耗 + context usage 消失修复；第四版：速率趋势图按模型拆分）。
 
 ## 产品规则
 
@@ -147,3 +147,18 @@ turnHeaderRowSchema.workTiming?: {
 - 用户中途取消的轮（resultType:"cancelled"）同样带 workTiming 与双速率。
 - 旧 CLI（payload 无 workTiming）与旧快照（rows 无 workTiming）：UI 回退现状文案，不报错。
 - 纯函数测试：聚合器（多请求/多工具累加、失败请求计入、缺 duration 跳过）、速率派生（任一时长 0 → 速率 undefined）、完成态标签降级（双速率→单速率→纯时长）、schema 旧数据兼容。
+
+### 会话 token 消耗展示
+
+- 完成态轮主行追加「本轮 {tokens}」：取 `workTiming.outputTokens`（output 口径，compact 格式化）；缺事实不追加（不显示 0）。
+- 最新轮（含运行中）主行追加「会话累计 {tokens}」：`usage.cumulative.outputTokens`（input/output/cache 全口径的生成侧累计）；运行中行显示为「累计 {tokens}」。分享只读时间线只显示本轮消耗（无 snapshot usage）。
+
+### context usage 指示器消失（bug 修复记录）
+
+- 现象：第一轮后 composer 的 context usage 显示，第二轮/换模型后永久消失。
+- 根因：①registry sparse schema 允许 `properties.contextWindow` 为 null，发射端（ModelSelected/ModelComplete）把 null 显式下发，投影当作「显式清除」整体清空 `usage.contextWindow`；②投影 `onModelComplete` 从不把解析出的分母回写侧状态 `contextWindowState.maxTokens`，缺字段时落 null；③hydration 重建（seedUsage）在 `currentContextWindow === null` 时拒绝用 seed 回填分母。三者叠加导致不可恢复。
+- 修复语义：**null/缺席 = 未知容量，不是清除**。
+  - 发射端（`steering.ts` ModelSelected、`turn-model-step.ts` ModelComplete）：窗口为 null/undefined 时不下发字段（缺席 = 投影兼容 no-op）；显式清除只属于真实清除事件。
+  - 投影 `onModelComplete`：显式数字回写侧状态分母；缺字段时依次沿用侧状态 → 快照旧分母；仅确认无任何已知分母才落 null。
+  - `seedUsage` touchedByEvent 分支：currentContextWindow 为 null 但 seed 携带有效分母时，用 seed 重建指示器（不再永久消失）。
+  - `onModelSelected` 的显式 null 清除语义保留（发射端已不产生 null，作为防御边界）。

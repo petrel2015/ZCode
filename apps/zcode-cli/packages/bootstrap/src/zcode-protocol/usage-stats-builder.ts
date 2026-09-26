@@ -4,6 +4,7 @@ import type {
   AppUsageHeatmapCell,
   AppUsageHeatmapWeek,
   AppUsageRange,
+  AppUsageRateModelPoint,
   AppUsageSnapshot,
 } from "@zcode/shared";
 
@@ -237,8 +238,43 @@ export function buildAppUsageSnapshot(
       toolExecutionMs: d.toolExecutionMs,
     });
   }
+  // 按模型拆分（provider+model）速率事实：day 桶来自 rateModels.dayIndex，
+  // hour 桶来自 rateModels.hour。月度由 daily 的模型明细加权聚合。
+  // rateModels 允许缺省（旧 store 实现），按空处理。
+  const modelsByDay = new Map<number, Map<string, AppUsageRateModelPoint>>();
+  const modelsByHour = new Map<number, Map<string, AppUsageRateModelPoint>>();
+  for (const m of result.rateModels ?? []) {
+    if (m.dayIndex !== undefined) {
+      const inner = modelsByDay.get(m.dayIndex) ?? new Map<string, AppUsageRateModelPoint>();
+      inner.set(`${m.providerId}\u0000${m.modelId}`, {
+        providerId: m.providerId,
+        modelId: m.modelId,
+        avgTokensPerSecond: bucketRate(m),
+        outputTokens: m.outputTokens,
+        generationMs: m.generationMs,
+        modelRequestMs: m.modelRequestMs,
+      });
+      modelsByDay.set(m.dayIndex, inner);
+    }
+    if (m.hour !== undefined) {
+      const inner = modelsByHour.get(m.hour) ?? new Map<string, AppUsageRateModelPoint>();
+      inner.set(`${m.providerId}\u0000${m.modelId}`, {
+        providerId: m.providerId,
+        modelId: m.modelId,
+        avgTokensPerSecond: bucketRate(m),
+        outputTokens: m.outputTokens,
+        generationMs: m.generationMs,
+        modelRequestMs: m.modelRequestMs,
+      });
+      modelsByHour.set(m.hour, inner);
+    }
+  }
+
   const daily = [];
-  const monthlyMap = new Map<string, RateBucketSums>();
+  const monthlyMap = new Map<
+    string,
+    RateBucketSums & { models: Map<string, AppUsageRateModelPoint> }
+  >();
   for (let di = startDayIndex; di <= endDayIndex; di += 1) {
     const sums = rateDayMap.get(di) ?? {
       outputTokens: 0,
@@ -247,24 +283,54 @@ export function buildAppUsageSnapshot(
       toolExecutionMs: 0,
     };
     const date = dayIndexToDate(di);
-    daily.push({ key: date, avgTokensPerSecond: bucketRate(sums), ...sums });
+    const dayModels = modelsByDay.get(di);
+    daily.push({
+      key: date,
+      avgTokensPerSecond: bucketRate(sums),
+      ...sums,
+      ...(dayModels && dayModels.size > 0 ? { models: [...dayModels.values()] } : {}),
+    });
     const monthKey = date.slice(0, 7);
-    const month = monthlyMap.get(monthKey) ?? {
-      outputTokens: 0,
-      generationMs: 0,
-      modelRequestMs: 0,
-      toolExecutionMs: 0,
-    };
+    const month =
+      monthlyMap.get(monthKey) ??
+      {
+        outputTokens: 0,
+        generationMs: 0,
+        modelRequestMs: 0,
+        toolExecutionMs: 0,
+        models: new Map<string, AppUsageRateModelPoint>(),
+      };
     month.outputTokens += sums.outputTokens;
     month.generationMs += sums.generationMs;
     month.modelRequestMs += sums.modelRequestMs;
     month.toolExecutionMs += sums.toolExecutionMs;
+    for (const [modelKey, point] of dayModels ?? []) {
+      const existing = month.models.get(modelKey);
+      if (existing) {
+        existing.outputTokens += point.outputTokens;
+        existing.generationMs += point.generationMs;
+        existing.modelRequestMs += point.modelRequestMs;
+      } else {
+        month.models.set(modelKey, { ...point });
+      }
+    }
     monthlyMap.set(monthKey, month);
   }
   const monthly = [...monthlyMap.entries()].map(([key, sums]) => ({
     key,
     avgTokensPerSecond: bucketRate(sums),
-    ...sums,
+    outputTokens: sums.outputTokens,
+    generationMs: sums.generationMs,
+    modelRequestMs: sums.modelRequestMs,
+    toolExecutionMs: sums.toolExecutionMs,
+    ...(sums.models.size > 0
+      ? {
+          models: [...sums.models.values()].map((point) => ({
+            ...point,
+            avgTokensPerSecond: bucketRate(point),
+          })),
+        }
+      : {}),
   }));
   const rateTrend: AppUsageSnapshot["rateTrend"] = {
     daily,
@@ -299,6 +365,9 @@ export function buildAppUsageSnapshot(
               generationMs: bucket.generationMs,
               modelRequestMs: bucket.modelRequestMs,
               toolExecutionMs: bucket.toolExecutionMs,
+              ...(modelsByHour.get(bucket.hour) && modelsByHour.get(bucket.hour)!.size > 0
+                ? { models: [...modelsByHour.get(bucket.hour)!.values()] }
+                : {}),
             }));
           })(),
         }

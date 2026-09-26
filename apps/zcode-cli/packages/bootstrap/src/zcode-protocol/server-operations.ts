@@ -1812,6 +1812,7 @@ export async function getUsageStats(context: ZCodeProtocolAgentServerContext, ra
         days: [],
         dayModels: [],
         rateDays: [],
+        rateModels: [],
       },
       buildOptions,
     );

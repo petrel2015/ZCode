@@ -946,6 +946,28 @@ export const SQLITE_MIGRATIONS: readonly SqliteMigration[] = [
       );
     `,
   },
+  {
+    appVersion: "0.16.5",
+    id: "0024_usage_rollup_hourly_model",
+    // 按模型的小时汇总（docs/specs/usage-stats-app-usage.md）：趋势图按
+    // provider+model 拆分速率的永久数据源；与 0023 同水位增量合并，prune 不清理。
+    sql: `
+      create table if not exists usage_rollup_hourly_model (
+        hour_index integer not null,
+        provider_id text not null,
+        model_id text not null,
+        output_tokens integer not null default 0,
+        total_tokens integer not null default 0,
+        generation_ms integer not null default 0,
+        model_request_ms integer not null default 0,
+        model_request_count integer not null default 0,
+        primary key (hour_index, provider_id, model_id)
+      );
+
+      create index if not exists usage_rollup_hourly_model_model_idx
+        on usage_rollup_hourly_model(provider_id, model_id, hour_index);
+    `,
+  },
 ];
 import { OFFICIAL_GLM_SELECTION_MIGRATION_SQL } from "./migrations/0021-official-glm-selection.js";
 import { BACKFILLED_SESSION_REASONING_MIGRATION_SQL } from "./migrations/0022-backfilled-session-reasoning.js";
