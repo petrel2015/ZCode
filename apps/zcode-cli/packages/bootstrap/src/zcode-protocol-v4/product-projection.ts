@@ -663,8 +663,19 @@ export class ProductProjection {
     };
     if (this.contextWindowState.touchedByEvent) {
       // 同类守卫：显式 ModelSelected.contextWindow（含 null）是日志权威容量，
-      // hydration seed 只能补回更准确的 token 事实，不得覆盖 maxTokens 或重新显示 null。
+      // hydration seed 只能补回更准确的 token 事实，不得覆盖已知 maxTokens。
+      // Bug 原因（context usage 消失）：currentContextWindow 为 null 时这里过去
+      // 保持 null——但 null 多数来自“未知容量”而非显式清除，seed 明确携带分母时
+      // 应用 seed 重建，否则重建路径后指示器永久消失。
       this.contextWindowState.usedTokens = seededContextWindow.usedTokens;
+      if (
+        currentContextWindow === null &&
+        seededContextWindow.maxTokens !== null &&
+        Number.isFinite(seededContextWindow.maxTokens) &&
+        seededContextWindow.maxTokens > 0
+      ) {
+        this.contextWindowState.maxTokens = seededContextWindow.maxTokens;
+      }
       this.snapshot = {
         ...this.snapshot,
         usage: {
@@ -673,7 +684,13 @@ export class ProductProjection {
                 ...currentContextWindow,
                 usedTokens: seededContextWindow.usedTokens,
               }
-            : null,
+            : this.contextWindowState.maxTokens !== null
+              ? {
+                  usedTokens: seededContextWindow.usedTokens,
+                  maxTokens: this.contextWindowState.maxTokens,
+                  autoCompactThresholdTokens: null,
+                }
+              : null,
           cumulative,
           // usage 是整体替换对象：seed 只补 contextWindow/cumulative 水位，
           // 已由 ModelComplete 累积的 throughput 必须透传，否则会把平均表盘抹回 null。
@@ -4532,14 +4549,25 @@ export class ProductProjection {
     const usage = payload.usage as ModelUsage;
     const usedTokens = getModelUsageContextTokens(usage) ?? 0;
     this.contextWindowState.usedTokens = usedTokens;
-    const maxTokens = payload.contextWindow ?? this.contextWindowState.maxTokens;
+    // Bug 原因（docs/specs/session-token-throughput.md「context usage 消失」）：发射端
+    // 过去会把模型未声明窗口的 null 显式下发；投影侧解析出的 maxTokens 也从不回写
+    // 侧状态，缺字段时直接落 null 清空指示器且不可恢复。修复三件事：
+    // ① 显式数字回写侧状态分母；② 缺字段时依次沿用侧状态 → 快照旧分母；
+    // ③ 只有确认无任何已知分母才落 null。
+    if (payload.contextWindow !== undefined && payload.contextWindow !== null) {
+      this.contextWindowState.maxTokens = payload.contextWindow;
+      this.contextWindowState.touchedByEvent = true;
+    }
+    const maxTokens =
+      payload.contextWindow ??
+      this.contextWindowState.maxTokens ??
+      this.snapshot.usage.contextWindow?.maxTokens ??
+      null;
     const cumulative = this.snapshot.usage.cumulative;
     deltas.push({
       op: "state.updated",
       patch: {
         usage: {
-          // Bug 原因：registry 已显式清除窗口时，缺少 contextWindow 的 ModelComplete
-          // 过去会用 0 重建对象，破坏未知容量语义。token 继续在侧状态和累计值中更新。
           contextWindow:
             maxTokens === null
               ? null

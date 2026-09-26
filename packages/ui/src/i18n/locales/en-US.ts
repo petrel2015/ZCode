@@ -3648,6 +3648,7 @@ const enUS: Record<string, string> = {
   "settings.usage.heatmap.range.cumulative": "Cumulative",
   "settings.usage.dailyChartTitle": "Daily token trend chart",
   "settings.usage.rateTrend.title": "Token rate trend",
+  "settings.usage.rateTrend.overallLegend": "Overall",
   "settings.usage.rateTrend.granularity.day": "Daily",
   "settings.usage.rateTrend.granularity.month": "Monthly",
   "settings.usage.rateTrend.granularity.hour": "Hourly",
@@ -4636,6 +4637,8 @@ const enUS: Record<string, string> = {
   "chat.history.runningRatesHint":
     "The average uses active work time since the conversation started (input waits excluded); the thinking average is session-cumulative over generation windows (same source as the composer average). Both switch to this turn's own data once the turn finishes",
   "chat.history.ratePending": "—",
+  "chat.history.turnTokens": "this turn {tokens} tokens",
+  "chat.history.sessionTokens": "session total {tokens}",
   "chat.history.workTimingDetail":
     "Local execution {local} · model requests {model} · thinking {modelRate} token/s (parallel time counted cumulatively)",
   "chat.history.workTimingBreakdown":

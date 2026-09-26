@@ -28,8 +28,8 @@ test("formatConversationWorkedForLabel keeps both rates on the main line", () =>
     stubIntl,
     "zh-CN",
   );
-  // 双速率常驻主行（整体 + 思考），不藏悬停。
-  assert.equal(label, "chat.history.workedForRates|1 时,10.0,60.0");
+  // 双速率常驻主行（整体 + 思考）+ 本轮消耗段（36k tokens）。
+  assert.equal(label, "chat.history.workedForRates|1 时,10.0,60.0 · chat.history.turnTokens|3.6万");
 });
 
 test("formatConversationWorkedForLabel degrades to single rate or duration only", () => {
@@ -43,15 +43,21 @@ test("formatConversationWorkedForLabel degrades to single rate or duration only"
     stubIntl,
     "zh-CN",
   );
-  assert.equal(overallOnly, "chat.history.workedForWithRate|1 秒,100.0");
+  assert.equal(
+    overallOnly,
+    "chat.history.workedForWithRate|1 秒,100.0 · chat.history.turnTokens|100",
+  );
   // 仅思考（activeMs 为 0 → 整体速率缺省；duration 格式化按最小 1 秒展示）：
   const modelOnly = formatConversationWorkedForLabel(
     { state: "completed", durationMs: 0, workTiming: timing },
     stubIntl,
     "zh-CN",
   );
-  assert.equal(modelOnly, "chat.history.workedForModelRate|1 秒,60.0");
-  // 无 workTiming：退回纯时长文案。
+  assert.equal(
+    modelOnly,
+    "chat.history.workedForModelRate|1 秒,60.0 · chat.history.turnTokens|3.6万",
+  );
+  // 无 workTiming：退回纯时长文案（无 tokens 段）。
   const durationOnly = formatConversationWorkedForLabel(
     { state: "completed", durationMs: 5000 },
     stubIntl,
@@ -60,6 +66,14 @@ test("formatConversationWorkedForLabel degrades to single rate or duration only"
   assert.equal(durationOnly, "chat.history.workedFor|5 秒");
   // 无时长事实：返回 null，由调用方回退「已处理」。
   assert.equal(formatConversationWorkedForLabel(undefined, stubIntl, "zh-CN"), null);
+  // 会话累计只在调用方显式传入时追加（最新轮）。
+  const withSession = formatConversationWorkedForLabel(
+    { state: "completed", durationMs: 5000 },
+    stubIntl,
+    "zh-CN",
+    123_456,
+  );
+  assert.equal(withSession, "chat.history.workedFor|5 秒 · chat.history.sessionTokens|12.3万");
 });
 
 test("resolveConversationTurnWorkRates derives overall and model-phase rates", () => {
