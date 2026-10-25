@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createHash } from "node:crypto";
+import { SQLITE_MIGRATIONS } from "../src/storage/session-store/migrations.js";
 import { DatabaseSync } from "node:sqlite";
+import { mkdtemp, rm } from "node:fs/promises";
 import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -19,7 +22,8 @@ function withUsageDb(run: (db: DatabaseSync, now: number) => void | Promise<void
     const dir = mkdtempSync(join(tmpdir(), "zcode-usage-rollup-test-"));
     const db = new DatabaseSync(join(dir, "db.sqlite"));
     try {
-      runSqliteSessionMigrations(db);
+      // 上游迁移已改为异步；必须等待提交后才能查询或关闭连接。
+      await runSqliteSessionMigrations(db, join(dir, "db.sqlite"));
       await run(db, Date.now());
     } finally {
       db.close();
@@ -124,3 +128,31 @@ test(
     assert.equal(Number(second.out), 200);
   }),
 );
+
+// 复现增强分支已安装数据库：旧迁移账本只记录 SQL checksum。
+test("upstream migration preserves enhanced hourly history and is repeatable", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "enhanced-upgrade-test-"));
+  const dbPath = join(directory, "db.sqlite");
+  const db = new DatabaseSync(dbPath);
+  try {
+    db.exec("CREATE TABLE schema_migration(id TEXT PRIMARY KEY, checksum TEXT NOT NULL, app_version TEXT, time_applied INTEGER NOT NULL)");
+    const enhancedIndex = SQLITE_MIGRATIONS.findIndex((m) => m.id === "0023_usage_rollup_hourly");
+    assert.ok(enhancedIndex >= 0);
+    for (const migration of SQLITE_MIGRATIONS.slice(0, enhancedIndex + 1)) {
+      db.exec(migration.sql);
+      db.prepare("INSERT INTO schema_migration VALUES(?,?,?,?)").run(
+        migration.id, createHash("sha256").update(migration.sql.trim()).digest("hex"), migration.appVersion, 1000,
+      );
+    }
+    db.exec("INSERT INTO usage_rollup_hourly(hour_index,output_tokens,generation_ms) VALUES(1,200,20000)");
+    await runSqliteSessionMigrations(db, dbPath);
+    await runSqliteSessionMigrations(db, dbPath);
+    assert.equal(db.prepare("SELECT output_tokens FROM usage_rollup_hourly WHERE hour_index=1").get()?.output_tokens, 200);
+    assert.ok(db.prepare("PRAGMA table_info(session)").all().some((row) => row.name === "time_deleted"));
+    assert.equal(db.prepare("SELECT count(*) AS n FROM schema_migration WHERE id='0023_usage_rollup_hourly'").get()?.n, 1);
+    assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally {
+    db.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});

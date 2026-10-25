@@ -66,3 +66,11 @@ AppUsageRateTrendChart ── useLocalAppUsageStats (hooks, hourlyDate)
 - With no local history the App panel shows the empty state, not an error.
 - The avatar dropdown shows the official usage summary block plus the additive "使用统计" menu entry; the entry opens the usage section without overriding the last-viewed tab.
 - Architecture check reports no new violations; the UI accesses data only through the existing service/protocol path (no new service, no direct store access).
+
+## 2026-10 upstream integration
+
+- Merge official commit `3c5b2276` while retaining enhanced local rate charts, avatar navigation, and hourly rollups. The duplicated v3.14.3 imports (`328c1a0c` / `29628c9a`) differ only in the root version; use their common source as the merge baseline, retaining both Git histories.
+- Preserve official soft-delete/database-identity migrations alongside `0023_usage_rollup_hourly`. Keep the existing enhanced migration ID and SQL unchanged to preserve installed database checksums; declare its touched table for the upstream backup/migration runner.
+- Await the upstream asynchronous migration runner before reading usage. Verify fresh databases, upgrades from enhanced databases, and repeated migration without losing rollup history.
+- Official highspeed timing/output fields and enhanced `workTiming`/throughput coexist; their statistical definitions remain distinct. Preserve official composer layout, submission settlement and highspeed badges.
+- Acceptance: existing enhanced throughput/rollup/navigation tests pass; projection carries both timing fields; official main is an ancestor of the merged branch; no conflict markers remain.
