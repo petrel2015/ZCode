@@ -310,6 +310,18 @@ CREATE TABLE turn_usage (
         primary key(session_id, turn_id)
       );
 
+CREATE TABLE usage_rollup_hourly (
+        hour_index integer primary key,
+        output_tokens integer not null default 0,
+        total_tokens integer not null default 0,
+        generation_ms integer not null default 0,
+        model_request_ms integer not null default 0,
+        tool_execution_ms integer not null default 0,
+        model_request_count integer not null default 0,
+        tool_call_count integer not null default 0,
+        turn_count integer not null default 0
+      );
+
 CREATE TABLE workflow_activity (
         id text primary key,
         run_id text not null references workflow_run(id) on delete cascade,
