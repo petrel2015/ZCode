@@ -1,4 +1,5 @@
-import { TID_V4_STREAM_RATE } from "@zcode/shared";
+// 上游已将测试标识移到独立公开入口，避免从根入口读取不存在的导出。
+import { TID_V4_STREAM_RATE } from "@zcode/shared/test-ids";
 import type { ConversationSnapshot } from "@zcode/shared/zcode-protocol-v4";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { formatTokenRateReadings } from "@/v4/streamingTokenRate.js";

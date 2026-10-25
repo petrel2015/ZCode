@@ -141,3 +141,7 @@ turnHeaderRowSchema.workTiming?: {
 - 用户中途取消的轮（resultType:"cancelled"）同样带 workTiming 与速率。
 - 旧 CLI（payload 无 workTiming）与旧快照（rows 无 workTiming）：UI 回退现状文案，不报错。
 - 纯函数测试：聚合器（多请求/多工具累加、失败请求计入、缺 duration 跳过）、速率派生（任一时长 0 → 速率 undefined）、schema 旧数据兼容。
+
+## 2026-10 合并兼容边界
+
+CLI runtime（唯一事实所有者）→ ModelComplete / TurnComplete → v4 projection → UI 只读展示。保留上游 outputTokens、高速模式耗时与提交确认逻辑；增强 workTiming 仍是并行累计口径，不替代上游的时长分解。投影 upsertTurnHeader 的上游位置参数保持顺序，增强 workTiming 追加在末尾；旧事件缺字段继续兼容。Desktop continuous 与 Web replayable 使用相同字段投影，不改变恢复链路。
